@@ -1,0 +1,661 @@
+<!DOCTYPE html>
+<html lang="es">
+
+<head>
+    <meta charset="UTF-8" />
+    <title>Chat seguro (E2EE simple)</title>
+    <style>
+        * {
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Arial, sans-serif;
+            margin: 0;
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: radial-gradient(circle at top, #202c33 0, #0b141a 45%, #000 100%);
+            color: #111;
+        }
+
+        /* Contenedor principal del chat */
+        .chat-wrapper {
+            width: 100%;
+            max-width: 960px;
+            height: 90vh;
+            max-height: 720px;
+            background: #111b21;
+            border-radius: 18px;
+            overflow: hidden;
+            box-shadow: 0 18px 40px rgba(0, 0, 0, 0.5);
+            display: flex;
+            flex-direction: column;
+            border: 1px solid #202c33;
+        }
+
+        header {
+            background: linear-gradient(90deg, #128c7e, #075e54);
+            color: white;
+            padding: 10px 16px;
+            border-bottom: 1px solid rgba(0, 0, 0, 0.2);
+        }
+
+        header h2 {
+            margin: 0;
+            font-size: 1.1rem;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        header h2 span.logo {
+            display: inline-flex;
+            width: 24px;
+            height: 24px;
+            border-radius: 50%;
+            border: 2px solid rgba(255, 255, 255, 0.7);
+            align-items: center;
+            justify-content: center;
+            font-size: 12px;
+            font-weight: bold;
+        }
+
+        #estado {
+            font-size: 0.8rem;
+            margin-top: 2px;
+            opacity: 0.85;
+        }
+
+        /* Layout interior: arriba login + mensajes, abajo input */
+        .chat-body {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            overflow-y: auto;
+        }
+
+        /* Tarjeta de login */
+        #login {
+            padding: 10px 14px;
+            background: #202c33;
+            color: #e9edef;
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+            align-items: center;
+            border-bottom: 1px solid #202c33;
+        }
+
+        #login label {
+            font-size: 0.85rem;
+            opacity: 0.9;
+        }
+
+        #login input {
+            padding: 6px 10px;
+            border-radius: 999px;
+            border: 1px solid #374045;
+            background: #111b21;
+            color: #e9edef;
+            font-size: 0.9rem;
+        }
+
+        #login input::placeholder {
+            color: #8696a0;
+        }
+
+        #login button {
+            padding: 8px 16px;
+            border: none;
+            background: #25d366;
+            color: #111b21;
+            cursor: pointer;
+            border-radius: 999px;
+            font-weight: 600;
+            font-size: 0.9rem;
+            transition: transform 0.1s ease, box-shadow 0.1s ease, background 0.1s ease;
+        }
+
+        #login button:hover {
+            background: #20bd59;
+            box-shadow: 0 2px 6px rgba(0, 0, 0, 0.3);
+            transform: translateY(-1px);
+        }
+
+        #mensajeLogin {
+            min-width: 220px;
+            font-size: 0.8rem;
+        }
+
+        .oculto {
+            display: none !important;
+        }
+
+        /* Zona de mensajes */
+        #mensajes {
+            list-style: none;
+            margin: 0;
+            padding: 16px 12px;
+            flex: 1;
+            overflow-y: auto;
+            background:
+                radial-gradient(circle at top left, rgba(32, 44, 51, 0.6), transparent 60%),
+                radial-gradient(circle at bottom right, rgba(32, 44, 51, 0.6), transparent 55%),
+                #0b141a;
+            position: relative;
+        }
+
+        #mensajes::-webkit-scrollbar {
+            width: 6px;
+        }
+
+        #mensajes::-webkit-scrollbar-track {
+            background: transparent;
+        }
+
+        #mensajes::-webkit-scrollbar-thumb {
+            background: #374045;
+            border-radius: 3px;
+        }
+
+        #mensajes li.mensaje {
+            margin-bottom: 8px;
+            max-width: 75%;
+            padding: 6px 10px;
+            border-radius: 12px;
+            display: block !important;
+            /* ← AGREGA ESTO */
+            position: relative;
+            word-wrap: break-word;
+            font-size: 0.9rem;
+        }
+
+
+        /* Mensajes de otros (izquierda) */
+        #mensajes li.otro {
+            background: #202c33;
+            color: #e9edef;
+            align-self: flex-start;
+        }
+
+        /* Mensajes míos (derecha) */
+        #mensajes li.mio {
+            background: #005c4b;
+            color: #e9edef;
+            margin-left: auto;
+        }
+
+        #mensajes li .autor {
+            font-weight: 600;
+            font-size: 0.8rem;
+            margin-bottom: 2px;
+            color: #c2f2dc;
+        }
+
+        #mensajes li.otro .autor {
+            color: #79b4ff;
+        }
+
+        #mensajes li .texto {
+            font-size: 0.9rem;
+        }
+
+        #mensajes li .hora {
+            font-size: 0.7rem;
+            opacity: 0.8;
+            margin-top: 2px;
+            text-align: right;
+        }
+
+        /* Barra inferior de envío */
+        #formulario {
+            display: flex;
+            padding: 10px;
+            background: #202c33;
+            border-top: 1px solid #202c33;
+            gap: 8px;
+            align-items: center;
+            flex-shrink: 0;
+
+        }
+
+        #input {
+            flex: 1;
+            padding: 10px 14px;
+            border-radius: 999px;
+            border: none;
+            outline: none;
+            font-size: 0.95rem;
+            background: #111b21;
+            color: #e9edef;
+        }
+
+        #input::placeholder {
+            color: #8696a0;
+        }
+
+        #btn {
+            padding: 10px 16px;
+            border-radius: 999px;
+            border: none;
+            cursor: pointer;
+            background: #25d366;
+            color: #111b21;
+            font-weight: 600;
+            font-size: 0.9rem;
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            transition: transform 0.1s ease, box-shadow 0.1s ease, background 0.1s ease;
+        }
+
+        #btn span.icon {
+            font-size: 1rem;
+        }
+
+        #btn:hover:not(:disabled) {
+            background: #20bd59;
+            box-shadow: 0 2px 6px rgba(0, 0, 0, 0.3);
+            transform: translateY(-1px);
+        }
+
+        #formulario input:disabled,
+        #formulario button:disabled {
+            opacity: 0.4;
+            cursor: not-allowed;
+        }
+
+        /* Responsive pequeño */
+        @media (max-width: 640px) {
+            .chat-wrapper {
+                height: 100vh;
+                border-radius: 0;
+            }
+
+            #login {
+                flex-direction: column;
+                align-items: flex-start;
+            }
+        }
+    </style>
+</head>
+
+<body>
+    <div class="chat-wrapper">
+        <header>
+            <h2>
+                <span class="logo">E2</span>
+                Chat seguro en tiempo real
+            </h2>
+            <div id="estado">No conectado</div>
+        </header>
+
+        <div class="chat-body">
+            <!-- Zona de login -->
+            <div id="login">
+                <label>Nombre:</label>
+                <input id="nombre" placeholder="Tu nombre" />
+
+                <label>Código acceso (servidor):</label>
+                <input id="codigoAcceso" placeholder="Ej: ACCESO-1234" />
+
+                <label>Contraseña cifrado (no se envía):</label>
+                <input id="claveCifrado" placeholder="Secreta compartida" type="password" />
+
+                <button id="btnEntrar">Entrar</button>
+                <span id="mensajeLogin"></span>
+            </div>
+
+            <!-- Lista de mensajes -->
+            <ul id="mensajes"></ul>
+
+            <!-- Formulario de envío -->
+            <div id="formulario">
+                <input id="input" autocomplete="off" placeholder="Escribe un mensaje..." disabled />
+                <button id="btn" disabled>
+                    <span class="icon">➤</span>
+                    Enviar
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Cliente de Socket.IO -->
+    <script src="/socket.io/socket.io.js"></script>
+    <script>
+        const socket = io();
+
+        const input = document.getElementById("input");
+        const btn = document.getElementById("btn");
+        const lista = document.getElementById("mensajes");
+
+        const nombreInput = document.getElementById("nombre");
+        const codigoAccesoInput = document.getElementById("codigoAcceso");
+        const claveCifradoInput = document.getElementById("claveCifrado");
+        const btnEntrar = document.getElementById("btnEntrar");
+        const mensajeLogin = document.getElementById("mensajeLogin");
+        const estado = document.getElementById("estado");
+        const loginBox = document.getElementById("login");
+
+        let nombreUsuario = null;
+        let unido = false;
+        let cryptoKey = null; // clave derivada de la contraseña de cifrado
+
+        // Sesión: cuánto tiempo recordamos el login (en milisegundos)
+        const SESSION_TTL_MS = 30 * 60 * 1000; // 30 minutos
+
+        function guardarSesion(nombre, codigoAcceso) {
+            const data = {
+                nombre,
+                codigoAcceso,
+                timestamp: Date.now(),
+            };
+            localStorage.setItem("chatSesionE2E", JSON.stringify(data));
+        }
+
+        function cargarSesion() {
+            const raw = localStorage.getItem("chatSesionE2E");
+            if (!raw) return null;
+
+            try {
+                const data = JSON.parse(raw);
+                if (!data.nombre || !data.codigoAcceso || !data.timestamp) return null;
+
+                const ahora = Date.now();
+                if (ahora - data.timestamp > SESSION_TTL_MS) {
+                    // Sesión caducada
+                    localStorage.removeItem("chatSesionE2E");
+                    return null;
+                }
+                return data;
+            } catch {
+                return null;
+            }
+        }
+
+
+        // ---------- UTILIDADES DE CIFRADO ----------
+
+        function strToUint8Array(str) {
+            return new TextEncoder().encode(str);
+        }
+
+        function uint8ArrayToBase64(bytes) {
+            let binary = "";
+            const len = bytes.byteLength;
+            for (let i = 0; i < len; i++) {
+                binary += String.fromCharCode(bytes[i]);
+            }
+            return btoa(binary);
+        }
+
+        function base64ToUint8Array(base64) {
+            const binary = atob(base64);
+            const len = binary.length;
+            const bytes = new Uint8Array(len);
+            for (let i = 0; i < len; i++) {
+                bytes[i] = binary.charCodeAt(i);
+            }
+            return bytes;
+        }
+
+        async function deriveKeyFromPassword(password) {
+            const pwdBytes = strToUint8Array(password);
+            const salt = strToUint8Array("SALT-FIJO-DEL-CHAT-EXPERIMENTAL");
+
+            const baseKey = await crypto.subtle.importKey(
+                "raw",
+                pwdBytes,
+                { name: "PBKDF2" },
+                false,
+                ["deriveKey"]
+            );
+
+            const key = await crypto.subtle.deriveKey(
+                {
+                    name: "PBKDF2",
+                    salt: salt,
+                    iterations: 100000,
+                    hash: "SHA-256",
+                },
+                baseKey,
+                { name: "AES-GCM", length: 256 },
+                false,
+                ["encrypt", "decrypt"]
+            );
+
+            return key;
+        }
+
+        async function encryptText(plainText) {
+            if (!cryptoKey) throw new Error("No hay clave de cifrado");
+
+            const iv = crypto.getRandomValues(new Uint8Array(12));
+            const encoded = strToUint8Array(plainText);
+
+            const cipherBuffer = await crypto.subtle.encrypt(
+                { name: "AES-GCM", iv },
+                cryptoKey,
+                encoded
+            );
+
+            const cipherBytes = new Uint8Array(cipherBuffer);
+
+            return {
+                cipherTextBase64: uint8ArrayToBase64(cipherBytes),
+                ivBase64: uint8ArrayToBase64(iv),
+            };
+        }
+
+        async function decryptText(cipherTextBase64, ivBase64) {
+            if (!cryptoKey) throw new Error("No hay clave de cifrado");
+
+            const cipherBytes = base64ToUint8Array(cipherTextBase64);
+            const iv = base64ToUint8Array(ivBase64);
+
+            const plainBuffer = await crypto.subtle.decrypt(
+                { name: "AES-GCM", iv },
+                cryptoKey,
+                cipherBytes
+            );
+
+            const plainText = new TextDecoder().decode(new Uint8Array(plainBuffer));
+            return plainText;
+        }
+
+        // ---------- UI MENSAJES ----------
+
+        function agregarMensajeALaLista(data) {
+            const li = document.createElement("li");
+            li.classList.add("mensaje");
+
+            if (data.autor === nombreUsuario) {
+                li.classList.add("mio");
+            } else {
+                li.classList.add("otro");
+            }
+
+            li.innerHTML = `
+                <div class="autor">${data.autor}</div>
+                <div class="texto">${data.texto}</div>
+                <div class="hora">${data.fecha}</div>
+            `;
+
+            lista.appendChild(li);
+            lista.scrollTop = lista.scrollHeight;
+        }
+
+        // ---------- LOGIN / UNIÓN AL CHAT ----------
+
+        btnEntrar.onclick = async () => {
+            const nombre = nombreInput.value.trim();
+            const codigoAcceso = codigoAccesoInput.value.trim();
+            const passwordCifrado = claveCifradoInput.value.trim();
+
+            if (!nombre || !codigoAcceso || !passwordCifrado) {
+                mensajeLogin.textContent = "Rellena nombre, código de acceso y contraseña de cifrado.";
+                mensajeLogin.style.color = "salmon";
+                return;
+            }
+
+            try {
+                mensajeLogin.textContent = "Derivando clave de cifrado...";
+                mensajeLogin.style.color = "#e9edef";
+
+                cryptoKey = await deriveKeyFromPassword(passwordCifrado);
+
+                nombreUsuario = nombre;
+
+                guardarSesion(nombre, codigoAcceso); // Guardar sexxion basica (sin contraseña de cifrado)
+
+                socket.emit("join", { nombre, codigoAcceso });
+
+                mensajeLogin.textContent = "Verificando acceso en el servidor...";
+                mensajeLogin.style.color = "#e9edef";
+            } catch (err) {
+                console.error(err);
+                mensajeLogin.textContent = "Error derivando clave de cifrado.";
+                mensajeLogin.style.color = "salmon";
+            }
+        };
+
+        socket.on("joinOk", (data) => {
+            unido = true;
+            mensajeLogin.textContent = data.mensaje;
+            mensajeLogin.style.color = "#25d366";
+            estado.textContent = "Conectado como: " + data.nombre;
+
+            input.disabled = false;
+            btn.disabled = false;
+
+            // Opcional: ocultar login cuando ya estás dentro
+            loginBox.classList.add("oculto");
+        });
+
+        socket.on("joinError", (msg) => {
+            unido = false;
+            mensajeLogin.textContent = msg;
+            mensajeLogin.style.color = "salmon";
+            estado.textContent = "No conectado";
+            input.disabled = true;
+            btn.disabled = true;
+            cryptoKey = null;
+        });
+
+        // ---------- HISTORIAL Y MENSAJES ----------
+
+        socket.on("historial", async (mensajesCifrados) => {
+            lista.innerHTML = "";
+            for (const m of mensajesCifrados) {
+                try {
+                    const texto = await decryptText(m.cipherText, m.iv);
+                    agregarMensajeALaLista({
+                        autor: m.autor,
+                        texto,
+                        fecha: m.fecha,
+                    });
+                } catch (err) {
+                    console.warn("No se pudo descifrar un mensaje del historial:", err);
+                    const li = document.createElement("li");
+                    li.classList.add("mensaje", "otro");
+                    li.innerHTML = `
+                        <div class="autor">${m.autor}</div>
+                        <div class="texto">[No se pudo descifrar el mensaje]</div>
+                        <div class="hora">${m.fecha}</div>
+                    `;
+                    lista.appendChild(li);
+                }
+            }
+        });
+
+        socket.on("mensaje", async (m) => {
+            try {
+                const texto = await decryptText(m.cipherText, m.iv);
+                agregarMensajeALaLista({
+                    autor: m.autor,
+                    texto,
+                    fecha: m.fecha,
+                });
+            } catch (err) {
+                console.warn("No se pudo descifrar un mensaje:", err);
+                const li = document.createElement("li");
+                li.classList.add("mensaje", "otro");
+                li.innerHTML = `
+                    <div class="autor">${m.autor}</div>
+                    <div class="texto">[No se pudo descifrar el mensaje]</div>
+                    <div class="hora">${m.fecha}</div>
+                `;
+                lista.appendChild(li);
+            }
+        });
+
+        // ---------- ENVÍO DE MENSAJES ----------
+
+        btn.onclick = async () => {
+            if (!unido) {
+                alert("Primero debes entrar al chat.");
+                return;
+            }
+            if (!cryptoKey) {
+                alert("No hay clave de cifrado. Reingresa al chat.");
+                return;
+            }
+
+            const texto = input.value.trim();
+            if (!texto) return;
+
+            try {
+                const { cipherTextBase64, ivBase64 } = await encryptText(texto);
+
+                const data = {
+                    cipherText: cipherTextBase64,
+                    iv: ivBase64,
+                    fecha: new Date().toLocaleTimeString(),
+                };
+
+                socket.emit("mensaje", data);
+                input.value = "";
+            } catch (err) {
+                console.error("Error cifrando mensaje:", err);
+                alert("Error cifrando mensaje.");
+            }
+        };
+
+        input.addEventListener("keydown", (e) => {
+            if (e.key === "Enter") {
+                btn.click();
+            }
+        });
+
+        // ---------- ESTADO DE CONEXIÓN ----------
+
+        socket.on("connect", () => {
+            console.log("Conectado al servidor de sockets");
+        });
+
+        socket.on("disconnect", () => {
+            console.log("Desconectado del servidor de sockets");
+            estado.textContent = "Desconectado";
+        });
+
+        // ---------- AUTO LOGIN AL CARGAR LA PÁGINA ----------
+
+        (async () => {
+            const sesion = cargarSesion();
+            if (!sesion) return;
+
+            // Rellenar los inputs visualmente
+            nombreInput.value = sesion.nombre;
+            codigoAccesoInput.value = sesion.codigoAcceso;
+
+            // Si además ya escribió la contraseña de cifrado, podríamos auto–entrar.
+            // Para no bajar seguridad, aquí solo rellenamos nombre/código
+            // y que el usuario ponga la clave y pulse "Entrar".
+        })();
+
+    </script>
+</body>
+
+</html>
