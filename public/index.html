@@ -3,7 +3,7 @@
 
 <head>
     <meta charset="UTF-8" />
-    <title>Chat seguro (E2EE simple)</title>
+    <title>Chat seguro</title>
     <style>
         * {
             box-sizing: border-box;
@@ -68,7 +68,7 @@
             opacity: 0.85;
         }
 
-        /* Layout interior: arriba login + mensajes, abajo input */
+        /* Layout interior: arriba barra de clave + mensajes, abajo input */
         .chat-body {
             flex: 1;
             display: flex;
@@ -76,7 +76,7 @@
             overflow-y: auto;
         }
 
-        /* Tarjeta de login */
+        /* Barra de clave de cifrado (antes login) */
         #login {
             padding: 10px 14px;
             background: #202c33;
@@ -161,17 +161,20 @@
         }
 
         #mensajes li.mensaje {
-            margin-bottom: 8px;
+            margin-bottom: 4px;
             max-width: 75%;
             padding: 6px 10px;
             border-radius: 12px;
             display: block !important;
-            /* ← AGREGA ESTO */
             position: relative;
             word-wrap: break-word;
             font-size: 0.9rem;
         }
 
+        /* Nuevo grupo de mensajes (cuando cambia de persona) */
+        #mensajes li.mensaje.nuevo-grupo {
+            margin-top: 12px;
+        }
 
         /* Mensajes de otros (izquierda) */
         #mensajes li.otro {
@@ -185,17 +188,6 @@
             background: #005c4b;
             color: #e9edef;
             margin-left: auto;
-        }
-
-        #mensajes li .autor {
-            font-weight: 600;
-            font-size: 0.8rem;
-            margin-bottom: 2px;
-            color: #c2f2dc;
-        }
-
-        #mensajes li.otro .autor {
-            color: #79b4ff;
         }
 
         #mensajes li .texto {
@@ -218,7 +210,6 @@
             gap: 8px;
             align-items: center;
             flex-shrink: 0;
-
         }
 
         #input {
@@ -287,24 +278,17 @@
         <header>
             <h2>
                 <span class="logo">E2</span>
-                Chat seguro en tiempo real
+                Developers Team
             </h2>
-            <div id="estado">No conectado</div>
+            <div id="estado">Conectando...</div>
         </header>
 
         <div class="chat-body">
-            <!-- Zona de login -->
+            <!-- Barra de clave de cifrado -->
             <div id="login">
-                <label>Nombre:</label>
-                <input id="nombre" placeholder="Tu nombre" />
-
-                <label>Código acceso (servidor):</label>
-                <input id="codigoAcceso" placeholder="Ej: ACCESO-1234" />
-
-                <label>Contraseña cifrado (no se envía):</label>
+                <label>Contraseña cifrado (no se envía al servidor):</label>
                 <input id="claveCifrado" placeholder="Secreta compartida" type="password" />
-
-                <button id="btnEntrar">Entrar</button>
+                <button id="btnClave">Usar clave</button>
                 <span id="mensajeLogin"></span>
             </div>
 
@@ -331,50 +315,34 @@
         const btn = document.getElementById("btn");
         const lista = document.getElementById("mensajes");
 
-        const nombreInput = document.getElementById("nombre");
-        const codigoAccesoInput = document.getElementById("codigoAcceso");
         const claveCifradoInput = document.getElementById("claveCifrado");
-        const btnEntrar = document.getElementById("btnEntrar");
+        const btnClave = document.getElementById("btnClave");
         const mensajeLogin = document.getElementById("mensajeLogin");
         const estado = document.getElementById("estado");
-        const loginBox = document.getElementById("login");
 
-        let nombreUsuario = null;
-        let unido = false;
         let cryptoKey = null; // clave derivada de la contraseña de cifrado
+        let miAutorId = null; // ID anónimo que asigna el servidor a este cliente
+        let ultimoAutor = null; // para agrupar mensajes consecutivos de la misma persona
+        let bufferMensajesPendientes = []; // mensajes recibidos antes de tener la clave
 
-        // Sesión: cuánto tiempo recordamos el login (en milisegundos)
-        const SESSION_TTL_MS = 30 * 60 * 1000; // 30 minutos
+        const PASS_STORAGE_KEY = "chatE2E_pass_v1";
 
-        function guardarSesion(nombre, codigoAcceso) {
-            const data = {
-                nombre,
-                codigoAcceso,
-                timestamp: Date.now(),
-            };
-            localStorage.setItem("chatSesionE2E", JSON.stringify(data));
-        }
-
-        function cargarSesion() {
-            const raw = localStorage.getItem("chatSesionE2E");
-            if (!raw) return null;
-
+        function guardarPass(password) {
             try {
-                const data = JSON.parse(raw);
-                if (!data.nombre || !data.codigoAcceso || !data.timestamp) return null;
-
-                const ahora = Date.now();
-                if (ahora - data.timestamp > SESSION_TTL_MS) {
-                    // Sesión caducada
-                    localStorage.removeItem("chatSesionE2E");
-                    return null;
-                }
-                return data;
-            } catch {
-                return null;
+                localStorage.setItem(PASS_STORAGE_KEY, password);
+            } catch (e) {
+                console.warn("No se pudo guardar la contraseña localmente:", e);
             }
         }
 
+        function cargarPass() {
+            try {
+                return localStorage.getItem(PASS_STORAGE_KEY);
+            } catch (e) {
+                console.warn("No se pudo leer la contraseña guardada:", e);
+                return null;
+            }
+        }
 
         // ---------- UTILIDADES DE CIFRADO ----------
 
@@ -471,14 +439,20 @@
             const li = document.createElement("li");
             li.classList.add("mensaje");
 
-            if (data.autor === nombreUsuario) {
+            // Agrupar mensajes consecutivos del mismo autor
+            if (data.autor !== ultimoAutor) {
+                li.classList.add("nuevo-grupo");
+                ultimoAutor = data.autor;
+            }
+
+            // Mensajes míos (derecha) vs otros (izquierda)
+            if (miAutorId && data.autor === miAutorId) {
                 li.classList.add("mio");
             } else {
                 li.classList.add("otro");
             }
 
             li.innerHTML = `
-                <div class="autor">${data.autor}</div>
                 <div class="texto">${data.texto}</div>
                 <div class="hora">${data.fecha}</div>
             `;
@@ -487,15 +461,40 @@
             lista.scrollTop = lista.scrollHeight;
         }
 
-        // ---------- LOGIN / UNIÓN AL CHAT ----------
+        async function procesarBufferSiClaveLista() {
+            if (!cryptoKey || bufferMensajesPendientes.length === 0) return;
 
-        btnEntrar.onclick = async () => {
-            const nombre = nombreInput.value.trim();
-            const codigoAcceso = codigoAccesoInput.value.trim();
+            const pendientes = bufferMensajesPendientes;
+            bufferMensajesPendientes = [];
+
+            for (const m of pendientes) {
+                try {
+                    const texto = await decryptText(m.cipherText, m.iv);
+                    agregarMensajeALaLista({
+                        autor: m.autor,
+                        texto,
+                        fecha: m.fecha,
+                    });
+                } catch (err) {
+                    console.warn("No se pudo descifrar un mensaje:", err);
+                    const li = document.createElement("li");
+                    li.classList.add("mensaje", "otro", "nuevo-grupo");
+                    li.innerHTML = `
+                        <div class="texto">[No se pudo descifrar el mensaje]</div>
+                        <div class="hora">${m.fecha}</div>
+                    `;
+                    lista.appendChild(li);
+                }
+            }
+        }
+
+        // ---------- CONFIGURAR CLAVE DE CIFRADO ----------
+
+        btnClave.onclick = async () => {
             const passwordCifrado = claveCifradoInput.value.trim();
 
-            if (!nombre || !codigoAcceso || !passwordCifrado) {
-                mensajeLogin.textContent = "Rellena nombre, código de acceso y contraseña de cifrado.";
+            if (!passwordCifrado) {
+                mensajeLogin.textContent = "Escribe una contraseña de cifrado.";
                 mensajeLogin.style.color = "salmon";
                 return;
             }
@@ -506,14 +505,21 @@
 
                 cryptoKey = await deriveKeyFromPassword(passwordCifrado);
 
-                nombreUsuario = nombre;
+                mensajeLogin.textContent = "Clave de cifrado lista.";
+                mensajeLogin.style.color = "#25d366";
+                input.disabled = false;
+                btn.disabled = false;
+                estado.textContent = "Conectado (clave configurada)";
 
-                guardarSesion(nombre, codigoAcceso); // Guardar sexxion basica (sin contraseña de cifrado)
+                // Ocultar la barra de clave después de entrar correctamente
+                document.getElementById("login").classList.add("oculto");
 
-                socket.emit("join", { nombre, codigoAcceso });
 
-                mensajeLogin.textContent = "Verificando acceso en el servidor...";
-                mensajeLogin.style.color = "#e9edef";
+                // Guardar la contraseña localmente para futuros reloads
+                guardarPass(passwordCifrado);
+
+                // Intentar procesar cualquier mensaje pendiente
+                procesarBufferSiClaveLista();
             } catch (err) {
                 console.error(err);
                 mensajeLogin.textContent = "Error derivando clave de cifrado.";
@@ -521,85 +527,36 @@
             }
         };
 
-        socket.on("joinOk", (data) => {
-            unido = true;
-            mensajeLogin.textContent = data.mensaje;
-            mensajeLogin.style.color = "#25d366";
-            estado.textContent = "Conectado como: " + data.nombre;
-
-            input.disabled = false;
-            btn.disabled = false;
-
-            // Opcional: ocultar login cuando ya estás dentro
-            loginBox.classList.add("oculto");
-        });
-
-        socket.on("joinError", (msg) => {
-            unido = false;
-            mensajeLogin.textContent = msg;
-            mensajeLogin.style.color = "salmon";
-            estado.textContent = "No conectado";
-            input.disabled = true;
-            btn.disabled = true;
-            cryptoKey = null;
+        // Permitir Enter en la clave para activarla
+        claveCifradoInput.addEventListener("keydown", (e) => {
+            if (e.key === "Enter") {
+                btnClave.click();
+            }
         });
 
         // ---------- HISTORIAL Y MENSAJES ----------
 
-        socket.on("historial", async (mensajesCifrados) => {
-            lista.innerHTML = "";
-            for (const m of mensajesCifrados) {
-                try {
-                    const texto = await decryptText(m.cipherText, m.iv);
-                    agregarMensajeALaLista({
-                        autor: m.autor,
-                        texto,
-                        fecha: m.fecha,
-                    });
-                } catch (err) {
-                    console.warn("No se pudo descifrar un mensaje del historial:", err);
-                    const li = document.createElement("li");
-                    li.classList.add("mensaje", "otro");
-                    li.innerHTML = `
-                        <div class="autor">${m.autor}</div>
-                        <div class="texto">[No se pudo descifrar el mensaje]</div>
-                        <div class="hora">${m.fecha}</div>
-                    `;
-                    lista.appendChild(li);
-                }
-            }
+        socket.on("identidad", (data) => {
+            miAutorId = data.autor;
         });
 
-        socket.on("mensaje", async (m) => {
-            try {
-                const texto = await decryptText(m.cipherText, m.iv);
-                agregarMensajeALaLista({
-                    autor: m.autor,
-                    texto,
-                    fecha: m.fecha,
-                });
-            } catch (err) {
-                console.warn("No se pudo descifrar un mensaje:", err);
-                const li = document.createElement("li");
-                li.classList.add("mensaje", "otro");
-                li.innerHTML = `
-                    <div class="autor">${m.autor}</div>
-                    <div class="texto">[No se pudo descifrar el mensaje]</div>
-                    <div class="hora">${m.fecha}</div>
-                `;
-                lista.appendChild(li);
-            }
+        socket.on("historial", (mensajesCifrados) => {
+            lista.innerHTML = "";
+            ultimoAutor = null;
+            bufferMensajesPendientes.push(...mensajesCifrados);
+            procesarBufferSiClaveLista();
+        });
+
+        socket.on("mensaje", (m) => {
+            bufferMensajesPendientes.push(m);
+            procesarBufferSiClaveLista();
         });
 
         // ---------- ENVÍO DE MENSAJES ----------
 
         btn.onclick = async () => {
-            if (!unido) {
-                alert("Primero debes entrar al chat.");
-                return;
-            }
             if (!cryptoKey) {
-                alert("No hay clave de cifrado. Reingresa al chat.");
+                alert("Primero debes configurar la clave de cifrado.");
                 return;
             }
 
@@ -633,28 +590,28 @@
 
         socket.on("connect", () => {
             console.log("Conectado al servidor de sockets");
+            if (!cryptoKey) {
+                estado.textContent = "Conectado (esperando clave de cifrado)";
+            }
         });
 
         socket.on("disconnect", () => {
             console.log("Desconectado del servidor de sockets");
             estado.textContent = "Desconectado";
+            input.disabled = true;
+            btn.disabled = true;
         });
 
-        // ---------- AUTO LOGIN AL CARGAR LA PÁGINA ----------
+        // ---------- AUTOCARGA DE CONTRASEÑA GUARDADA ----------
 
-        (async () => {
-            const sesion = cargarSesion();
-            if (!sesion) return;
-
-            // Rellenar los inputs visualmente
-            nombreInput.value = sesion.nombre;
-            codigoAccesoInput.value = sesion.codigoAcceso;
-
-            // Si además ya escribió la contraseña de cifrado, podríamos auto–entrar.
-            // Para no bajar seguridad, aquí solo rellenamos nombre/código
-            // y que el usuario ponga la clave y pulse "Entrar".
+        (function init() {
+            const passGuardada = cargarPass();
+            if (passGuardada) {
+                claveCifradoInput.value = passGuardada;
+                mensajeLogin.textContent = "Pulsa Enter";
+                mensajeLogin.style.color = "#e9edef";
+            }
         })();
-
     </script>
 </body>
 
