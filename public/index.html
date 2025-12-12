@@ -429,6 +429,7 @@
         }
 
         async function procesarBufferSiClaveLista() {
+            if (!cryptoKey || !claveValidaIngresada) return;
             if (bufferMensajesPendientes.length === 0) return;
 
             const pendientes = bufferMensajesPendientes;
