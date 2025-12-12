@@ -48,7 +48,8 @@
         header {
             background: #ffffff;
             color: #111827;
-            padding: 14px 20px;
+            position: relative;
+            padding: 18px 20px 14px;
             border-bottom: 1px solid rgba(0, 0, 0, 0.06);
             display: flex;
             flex-direction: column;
@@ -94,15 +95,46 @@
 
         /* Barra de clave de cifrado */
         #login {
-            padding: 10px 16px;
-            background: #f9fafb;
-            color: #111827;
+            padding: 12px 16px;
+            margin: 14px 12px 10px;
+
+            color: var(--text);
             display: flex;
             flex-wrap: wrap;
             gap: 10px;
             align-items: center;
-            border-bottom: 1px solid rgba(15, 23, 42, 0.06);
+
+            background: var(--glass-bg);
+            backdrop-filter: blur(14px);
+            -webkit-backdrop-filter: blur(14px);
+
+            border: 1px solid var(--glass-border);
+            border-radius: 20px;
+            box-shadow: var(--glass-shadow);
+
+            /* quitamos border-bottom porque ahora es “card” */
+            transition:
+                background-color var(--t-med) var(--ease-apple),
+                border-color var(--t-med) var(--ease-apple),
+                box-shadow var(--t-med) var(--ease-apple),
+                transform var(--t-fast) var(--ease-apple);
         }
+
+        #login:focus-within {
+            transform: translateY(-1px);
+            box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.18), var(--glass-shadow);
+        }
+
+        #login input {
+            background: rgba(255, 255, 255, 0.85);
+            backdrop-filter: blur(6px);
+        }
+
+        html[data-theme="dark"] #login input {
+            background: rgba(16, 20, 28, 0.85);
+        }
+
+
 
         #login label {
             font-size: 0.8rem;
@@ -210,7 +242,7 @@
             border-top-left-radius: 18px;
         }
 
-        /* Mensajes míos (derecha) – estilo azul iMessage */
+        /* Mensajes mios (derecha) – estilo azul iMessage */
         #mensajes li.mio {
             background: #007aff;
             color: #ffffff;
@@ -326,7 +358,7 @@
             }
 
             header {
-                padding: 10px 16px;
+                padding: 16px 16px 12px;
             }
 
             header h2 {
@@ -334,10 +366,46 @@
             }
 
             #login {
-                flex-direction: column;
-                align-items: stretch;
-                gap: 6px;
+                padding: 12px 16px;
+                margin: 8px 12px;
+
+                display: flex;
+                flex-wrap: wrap;
+                gap: 10px;
+                align-items: center;
+
+                background: var(--glass-bg);
+                backdrop-filter: blur(14px);
+                -webkit-backdrop-filter: blur(14px);
+
+                border: 1px solid var(--glass-border);
+                border-radius: 20px;
+
+                box-shadow: var(--glass-shadow);
+
+                transition:
+                    background-color var(--t-med) var(--ease-apple),
+                    border-color var(--t-med) var(--ease-apple),
+                    box-shadow var(--t-med) var(--ease-apple),
+                    transform var(--t-fast) var(--ease-apple);
             }
+
+            #login:focus-within {
+                transform: translateY(-1px);
+                box-shadow:
+                    0 0 0 3px rgba(37, 99, 235, 0.18),
+                    var(--glass-shadow);
+            }
+
+            #login input {
+                background: rgba(255, 255, 255, 0.85);
+                backdrop-filter: blur(6px);
+            }
+
+            html[data-theme="dark"] #login input {
+                background: rgba(16, 20, 28, 0.85);
+            }
+
 
             #login input,
             #login button {
@@ -371,6 +439,336 @@
                 border-radius: 24px;
             }
         }
+
+        header {
+            position: relative;
+            /* necesario para posicionar el botón sin mover nada */
+        }
+
+        /* Botón Log out (Apple-like) */
+        .logout-btn {
+            display: none;
+            position: absolute;
+            top: 12px;
+            right: 14px;
+
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+
+            padding: 8px 12px;
+            border-radius: 999px;
+
+            border: 1px solid rgba(17, 24, 39, 0.10);
+            background: rgba(255, 255, 255, 0.75);
+            backdrop-filter: blur(10px);
+            -webkit-backdrop-filter: blur(10px);
+
+            color: #111827;
+            font-size: 0.84rem;
+            font-weight: 600;
+            letter-spacing: -0.01em;
+
+            cursor: pointer;
+            user-select: none;
+
+            box-shadow: 0 8px 24px rgba(0, 0, 0, 0.08);
+            transition: transform 0.12s ease, box-shadow 0.12s ease, background 0.12s ease, border-color 0.12s ease;
+        }
+
+        .logout-btn:hover {
+            transform: translateY(-1px);
+            box-shadow: 0 12px 28px rgba(0, 0, 0, 0.10);
+            border-color: rgba(17, 24, 39, 0.16);
+            background: rgba(255, 255, 255, 0.90);
+        }
+
+        .logout-btn:active {
+            transform: translateY(0px);
+            box-shadow: 0 6px 18px rgba(0, 0, 0, 0.08);
+        }
+
+        .logout-btn:focus-visible {
+            outline: none;
+            box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.18), 0 12px 28px rgba(0, 0, 0, 0.10);
+        }
+
+        /* Responsive: más compacto en móvil */
+        @media (max-width: 640px) {
+            .logout-btn {
+                top: 8px;
+                right: 10px;
+                padding: 7px 10px;
+                font-size: 0.82rem;
+            }
+        }
+
+        /* =========================
+   THEME TOKENS (Apple-like)
+   ========================= */
+        :root {
+            /* timings */
+            --t-fast: 160ms;
+            --t-med: 320ms;
+            --ease-apple: cubic-bezier(.2, .8, .2, 1);
+
+            /* light */
+            --bg: #f5f5f7;
+            --surface: #ffffff;
+            --surface-2: #f9fafb;
+            --text: #111827;
+            --text-dim: rgba(17, 24, 39, .70);
+
+            --border: rgba(0, 0, 0, 0.06);
+            --border-strong: rgba(17, 24, 39, 0.10);
+
+            --shadow: 0 24px 60px rgba(0, 0, 0, 0.10);
+
+            /* accents */
+            --accent: #2563eb;
+            --accent-2: #007aff;
+
+            /* chat bubbles */
+            --bubble-other: #e5e7eb;
+            --bubble-other-text: #111827;
+            --bubble-me: #007aff;
+            --bubble-me-text: #ffffff;
+
+            /* scroll */
+            --scroll: rgba(148, 163, 184, 0.85);
+
+            /* glass */
+            --glass-bg: rgba(255, 255, 255, 0.75);
+            --glass-border: rgba(17, 24, 39, 0.10);
+            --glass-shadow: 0 10px 28px rgba(0, 0, 0, 0.10);
+        }
+
+        /* Dark theme overrides */
+        html[data-theme="dark"] {
+            --bg: #0b0f17;
+            --surface: rgba(16, 20, 28, 0.92);
+            --surface-2: rgba(20, 24, 34, 0.92);
+            --text: rgba(255, 255, 255, 0.92);
+            --text-dim: rgba(255, 255, 255, 0.62);
+
+            --border: rgba(255, 255, 255, 0.08);
+            --border-strong: rgba(255, 255, 255, 0.14);
+
+            --shadow: 0 28px 80px rgba(0, 0, 0, 0.55);
+
+            --accent: #3b82f6;
+            --accent-2: #0a84ff;
+            /* iOS-like blue */
+
+            --bubble-other: rgba(255, 255, 255, 0.10);
+            --bubble-other-text: rgba(255, 255, 255, 0.90);
+            --bubble-me: #0a84ff;
+            --bubble-me-text: #ffffff;
+
+            --scroll: rgba(148, 163, 184, 0.55);
+
+            --glass-bg: rgba(16, 20, 28, 0.55);
+            --glass-border: rgba(255, 255, 255, 0.12);
+            --glass-shadow: 0 16px 48px rgba(0, 0, 0, 0.45);
+        }
+
+        /* ==================================
+   APPLY TOKENS + SMOOTH TRANSITIONS
+   ================================== */
+        html,
+        body {
+            background: var(--bg);
+            color: var(--text);
+
+            /* “premium” global transition */
+            transition:
+                background-color var(--t-med) var(--ease-apple),
+                color var(--t-med) var(--ease-apple);
+        }
+
+        .chat-wrapper {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            box-shadow: var(--shadow);
+            transition:
+                background-color var(--t-med) var(--ease-apple),
+                border-color var(--t-med) var(--ease-apple),
+                box-shadow var(--t-med) var(--ease-apple);
+        }
+
+        header {
+            background: var(--surface);
+            color: var(--text);
+            border-bottom: 1px solid var(--border);
+            transition:
+                background-color var(--t-med) var(--ease-apple),
+                color var(--t-med) var(--ease-apple),
+                border-color var(--t-med) var(--ease-apple);
+        }
+
+        #estado {
+            color: var(--text-dim);
+            transition: color var(--t-med) var(--ease-apple);
+        }
+
+        .chat-body,
+        #mensajes {
+            background: var(--bg);
+            transition: background-color var(--t-med) var(--ease-apple);
+        }
+
+        #login,
+        #formulario {
+            background: var(--surface-2);
+            border-color: var(--border);
+            transition:
+                background-color var(--t-med) var(--ease-apple),
+                border-color var(--t-med) var(--ease-apple);
+        }
+
+        #login label {
+            color: var(--text-dim);
+            transition: color var(--t-med) var(--ease-apple);
+        }
+
+        #login input,
+        #input {
+            background: var(--surface);
+            color: var(--text);
+            border-color: rgba(148, 163, 184, 0.40);
+            transition:
+                background-color var(--t-med) var(--ease-apple),
+                color var(--t-med) var(--ease-apple),
+                border-color var(--t-med) var(--ease-apple),
+                box-shadow var(--t-fast) var(--ease-apple);
+        }
+
+        #mensajes::-webkit-scrollbar-thumb {
+            background: var(--scroll);
+            transition: background-color var(--t-med) var(--ease-apple);
+        }
+
+        /* Bubbles */
+        #mensajes li.otro {
+            background: var(--bubble-other);
+            color: var(--bubble-other-text);
+            transition:
+                background-color var(--t-med) var(--ease-apple),
+                color var(--t-med) var(--ease-apple);
+        }
+
+        #mensajes li.mio {
+            background: var(--bubble-me);
+            color: var(--bubble-me-text);
+            transition:
+                background-color var(--t-med) var(--ease-apple),
+                color var(--t-med) var(--ease-apple);
+        }
+
+        /* Accent buttons adapt a bit in dark */
+        #login button,
+        #btn {
+            background: var(--accent);
+            transition:
+                background-color var(--t-fast) var(--ease-apple),
+                transform var(--t-fast) var(--ease-apple),
+                box-shadow var(--t-fast) var(--ease-apple);
+        }
+
+        #login button:hover,
+        #btn:hover:not(:disabled) {
+            background: color-mix(in srgb, var(--accent) 85%, #000 15%);
+        }
+
+        /* =========================
+   THEME BUTTON (always visible)
+   ========================= */
+        .theme-btn {
+            position: absolute;
+            top: 12px;
+            right: 14px;
+
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+
+            width: 40px;
+            height: 40px;
+            border-radius: 999px;
+
+            border: 1px solid var(--glass-border);
+            background: var(--glass-bg);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+
+            color: var(--text);
+            cursor: pointer;
+            user-select: none;
+
+            box-shadow: var(--glass-shadow);
+
+            /* buttery transitions */
+            transition:
+                background-color var(--t-med) var(--ease-apple),
+                border-color var(--t-med) var(--ease-apple),
+                color var(--t-med) var(--ease-apple),
+                box-shadow var(--t-med) var(--ease-apple),
+                transform var(--t-fast) var(--ease-apple),
+                filter var(--t-fast) var(--ease-apple);
+        }
+
+        .theme-btn:hover {
+            transform: translateY(-1px);
+            filter: brightness(1.03);
+        }
+
+        .theme-btn:active {
+            transform: translateY(0px) scale(0.98);
+        }
+
+        .theme-btn:focus-visible {
+            outline: none;
+            box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.22), var(--glass-shadow);
+        }
+
+        .theme-icon {
+            font-size: 1rem;
+            line-height: 1;
+            transform: translateY(-0.5px);
+            transition: transform var(--t-med) var(--ease-apple);
+        }
+
+
+
+        #btnTheme.theme-btn.theme-has-logout {
+            right: 80px;
+            padding: 12px 24px;
+            margin: -2px 12px 10px;
+            /* leaves room for logout pill */
+        }
+
+        /* Mobile adjustments */
+        @media (max-width: 640px) {
+            .theme-btn {
+                top: 8px;
+                right: 10px;
+                width: 38px;
+                height: 38px;
+            }
+
+            #btnTheme.theme-btn.theme-has-logout {
+                right: 56px;
+            }
+        }
+
+        /* Respect reduced motion */
+        @media (prefers-reduced-motion: reduce) {
+            * {
+                transition: none !important;
+                scroll-behavior: auto !important;
+            }
+        }
     </style>
 </head>
 
@@ -381,7 +779,16 @@
                 <span class="logo">E2</span>
                 Developers Team
             </h2>
+
             <div id="estado">Conectando...</div>
+            <button id="btnLogout" class="logout-btn" type="button" aria-label="Cerrar sesión">
+                Log out
+            </button>
+
+            <button id="btnTheme" class="theme-btn" type="button" aria-label="Cambiar modo oscuro" title="Modo oscuro">
+                <span class="theme-icon" aria-hidden="true">☾</span>
+            </button>
+
         </header>
 
         <div class="chat-body">
@@ -420,6 +827,15 @@
         const mensajeLogin = document.getElementById("mensajeLogin");
         const estado = document.getElementById("estado");
 
+        // Botón logout (si existe en el HTML)
+        const btnLogout = document.getElementById("btnLogout");
+
+        // Botón de modo oscuro (si existe en el HTML)
+        const themeBtn = document.getElementById("btnTheme");
+
+        // Si existe logout, movemos el botón de tema a la izquierda automáticamente
+        if (btnLogout && themeBtn) themeBtn.classList.add("theme-has-logout");
+
         let cryptoKey = null; // clave derivada de la contraseña de cifrado
         let miAutorId = null; // ID anónimo que asigna el servidor a este cliente
         let ultimoAutor = null; // para agrupar mensajes consecutivos de la misma persona
@@ -428,6 +844,9 @@
 
         const CLAVE_UNICA = "Linuxeros";
         const PASS_STORAGE_KEY = "chatE2E_pass_v1";
+
+        // Por defecto, ocultar logout hasta estar autenticado
+        if (btnLogout) btnLogout.style.display = "none";
 
         function guardarPass(password) {
             try {
@@ -553,9 +972,9 @@
             }
 
             li.innerHTML = `
-                <div class="texto">${data.texto}</div>
-                <div class="hora">${data.fecha}</div>
-            `;
+      <div class="texto">${data.texto}</div>
+      <div class="hora">${data.fecha}</div>
+    `;
 
             lista.appendChild(li);
             lista.scrollTop = lista.scrollHeight;
@@ -580,9 +999,9 @@
                     const li = document.createElement("li");
                     li.classList.add("mensaje", "otro", "nuevo-grupo");
                     li.innerHTML = `
-                        <div class="texto">[No se pudo descifrar el mensaje]</div>
-                        <div class="hora">${m.fecha}</div>
-                    `;
+          <div class="texto">[No se pudo descifrar el mensaje]</div>
+          <div class="hora">${m.fecha}</div>
+        `;
                     lista.appendChild(li);
                 }
             }
@@ -605,6 +1024,9 @@
                 input.disabled = true;
                 btn.disabled = true;
                 claveValidaIngresada = false;
+
+                // Ocultar logout si existe
+                if (btnLogout) btnLogout.style.display = "none";
                 return;
             }
 
@@ -631,6 +1053,9 @@
 
                 guardarPass(CLAVE_UNICA);
 
+                // Mostrar logout SOLO cuando ya estás autenticado
+                if (btnLogout) btnLogout.style.display = "inline-flex";
+
                 procesarBufferSiClaveLista();
             } catch (err) {
                 console.error(err);
@@ -648,6 +1073,9 @@
             document.getElementById("login").classList.remove("oculto");
             input.disabled = true;
             btn.disabled = true;
+
+            // Ocultar logout al quedar no autorizado
+            if (btnLogout) btnLogout.style.display = "none";
         });
 
         // ---------- HISTORIAL Y MENSAJES ----------
@@ -710,6 +1138,9 @@
                 ? "Conectado (clave configurada)"
                 : "Conectado (esperando clave de cifrado)";
 
+            // NO mostramos logout aquí; se mostrará solo tras auth-ok
+            if (btnLogout) btnLogout.style.display = cryptoKey ? "inline-flex" : "none";
+
             if (claveValidaIngresada && claveCifradoInput.value.trim() === CLAVE_UNICA) {
                 solicitarAccesoAlServidor();
             }
@@ -720,10 +1151,103 @@
             estado.textContent = "Desconectado";
             input.disabled = true;
             btn.disabled = true;
+
+            // Al desconectarse, ocultar logout
+            if (btnLogout) btnLogout.style.display = "none";
         });
 
-        // ---------- AUTOCARGA DE CONTRASEÑA GUARDADA ----------
+        // ---------- LOG OUT ----------
+        async function logout() {
+            if (!btnLogout) return;
 
+            btnLogout.disabled = true;
+            const originalText = btnLogout.textContent;
+            btnLogout.textContent = "Saliendo...";
+
+            try {
+                await fetch("/logout", {
+                    method: "POST",
+                    credentials: "include",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ reason: "user_logout" }),
+                });
+            } catch (e) {
+                console.warn("Logout server request failed:", e);
+            } finally {
+                // Ocultar logout inmediatamente (antes de redirigir)
+                btnLogout.style.display = "none";
+
+                // Limpiar almacenamiento local
+                try { localStorage.removeItem(PASS_STORAGE_KEY); } catch (e) { }
+                try { sessionStorage.clear(); } catch (e) { }
+
+                // Resetear estado de UI
+                claveValidaIngresada = false;
+                cryptoKey = null;
+                ultimoAutor = null;
+                bufferMensajesPendientes = [];
+                input.disabled = true;
+                btn.disabled = true;
+
+                // Mostrar barra de login de nuevo por si no redirige
+                const loginBar = document.getElementById("login");
+                if (loginBar) loginBar.classList.remove("oculto");
+
+                // Desconectar socket
+                try { socket.disconnect(); } catch (e) { }
+
+                // Redirigir
+                window.location.replace("/");
+
+                // fallback por si el navegador cancela replace en algún caso raro
+                btnLogout.disabled = false;
+                btnLogout.textContent = originalText;
+            }
+        }
+
+        if (btnLogout) {
+            btnLogout.addEventListener("click", logout);
+        }
+
+        // ---------- DARK MODE ----------
+        const THEME_KEY = "chat_theme_v1";
+
+        function setTheme(theme) {
+            document.documentElement.setAttribute("data-theme", theme);
+            try { localStorage.setItem(THEME_KEY, theme); } catch (e) { }
+
+            // Icono: luna en light, sol en dark
+            if (themeBtn) {
+                const icon = themeBtn.querySelector(".theme-icon");
+                if (icon) icon.textContent = theme === "dark" ? "☀︎" : "☾";
+                themeBtn.title = theme === "dark" ? "Modo claro" : "Modo oscuro";
+            }
+        }
+
+        function getInitialTheme() {
+            try {
+                const saved = localStorage.getItem(THEME_KEY);
+                if (saved === "light" || saved === "dark") return saved;
+            } catch (e) { }
+
+            return window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches
+                ? "dark"
+                : "light";
+        }
+
+        // Aplicar theme al cargar
+        setTheme(getInitialTheme());
+
+        // Click toggle
+        if (themeBtn) {
+            themeBtn.addEventListener("click", () => {
+                const current = document.documentElement.getAttribute("data-theme") || "light";
+                const next = current === "dark" ? "light" : "dark";
+                setTheme(next);
+            });
+        }
+
+        // ---------- AUTOCARGA DE PASSWORD GUARDADA ----------
         (function init() {
             const passGuardada = cargarPass();
             if (passGuardada === CLAVE_UNICA) {
@@ -736,6 +1260,8 @@
             }
         })();
     </script>
+
+
 </body>
 
 </html>

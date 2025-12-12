@@ -71,6 +71,55 @@ async function obtenerHistorial() {
 
 // Servir archivos estáticos desde la carpeta "public"
 app.use(express.static("public"));
+app.use(express.json());
+
+function clearCookieVariants(res, name, req) {
+    // Intentamos limpiar con varias combinaciones comunes
+    const secure = req.secure || req.headers["x-forwarded-proto"] === "https";
+
+    const base = {
+        path: "/",
+        httpOnly: true,
+        sameSite: "lax",
+        secure,
+    };
+
+    // Sin domain
+    res.clearCookie(name, base);
+
+    // Con domain exacto
+    const host = (req.headers.host || "").split(":")[0];
+    if (host) {
+        res.clearCookie(name, { ...base, domain: host });
+        // Con .domain para subdominios
+        if (host.includes(".")) {
+            res.clearCookie(name, { ...base, domain: "." + host });
+        }
+    }
+
+    // También en path vacío / (a veces apps lo setean distinto)
+    res.clearCookie(name, { ...base, path: "/" });
+}
+
+app.post("/logout", (req, res) => {
+    // Limpia cookies típicas (por si tu “página principal” o proxy las usa)
+    const cookieNamesToClear = [
+        process.env.COOKIE_NAME, // si defines COOKIE_NAME en .env
+        "token",
+        "auth",
+        "session",
+        "sid",
+        "connect.sid", // express-session default
+    ].filter(Boolean);
+
+    for (const name of cookieNamesToClear) {
+        clearCookieVariants(res, name, req);
+    }
+
+    // Si un día manejas sesiones/token, aquí sería el lugar para invalidarlas (logout global real)
+    return res.status(204).end();
+});
+
 
 // (Opcional) función para generar un id anónimo corto a partir del socket.id
 function generarIdAnonimo(socketId) {
