@@ -272,6 +272,62 @@
             text-align: right;
         }
 
+        /* Mensajes de imagen */
+        #mensajes li .imagen-bubble {
+            margin-top: 6px;
+            border-radius: 16px;
+            overflow: hidden;
+            background: var(--surface, #ffffff);
+            border: 1px solid var(--border, rgba(0, 0, 0, 0.06));
+            box-shadow: 0 10px 28px rgba(0, 0, 0, 0.12);
+            transition: transform 0.12s ease, box-shadow 0.12s ease;
+        }
+
+        #mensajes li .imagen-bubble:hover {
+            transform: translateY(-1px);
+            box-shadow: 0 14px 32px rgba(0, 0, 0, 0.16);
+        }
+
+        #mensajes li .imagen-thumb {
+            display: block;
+            width: 100%;
+            max-height: 280px;
+            object-fit: cover;
+            background: #e5e7eb;
+            image-rendering: pixelated;
+        }
+
+        #mensajes li .imagen-meta {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 10px;
+            padding: 6px 10px 8px;
+            font-size: 0.75rem;
+            color: inherit;
+        }
+
+        #mensajes li .download-chip {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            padding: 4px 10px;
+            border-radius: 999px;
+            background: var(--glass-bg, rgba(255, 255, 255, 0.18));
+            border: 1px solid var(--glass-border, rgba(0, 0, 0, 0.06));
+            color: inherit;
+            text-decoration: none;
+            font-weight: 600;
+        }
+
+        #mensajes li.mio .imagen-bubble {
+            border-color: rgba(255, 255, 255, 0.18);
+        }
+
+        #mensajes li.otro .imagen-bubble {
+            border-color: rgba(0, 0, 0, 0.08);
+        }
+
         /* Barra inferior de envío */
         #formulario {
             display: flex;
@@ -329,6 +385,39 @@
             background: #1d4ed8;
             box-shadow: 0 4px 10px rgba(37, 99, 235, 0.35);
             transform: translateY(-1px);
+        }
+
+        .icon-btn {
+            width: 40px;
+            height: 40px;
+            border-radius: 999px;
+            border: 1px solid rgba(148, 163, 184, 0.6);
+            background: var(--surface, #ffffff);
+            color: var(--text, #111827);
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            transition: transform 0.08s ease, box-shadow 0.08s ease, border-color 0.12s ease;
+        }
+
+        .icon-btn:hover:not(:disabled) {
+            transform: translateY(-1px);
+            box-shadow: 0 4px 10px rgba(0, 0, 0, 0.12);
+            border-color: rgba(59, 130, 246, 0.65);
+        }
+
+        .icon-btn:disabled {
+            opacity: 0.4;
+            cursor: not-allowed;
+            box-shadow: none;
+        }
+
+        .upload-hint {
+            font-size: 0.75rem;
+            color: var(--text-dim, #6b7280);
+            padding: 2px 6px 0;
+            min-height: 18px;
         }
 
         #formulario input:disabled,
@@ -806,10 +895,15 @@
             <!-- Formulario de envío -->
             <div id="formulario">
                 <input id="input" autocomplete="off" placeholder="Escribe un mensaje..." disabled />
+                <input id="fileInput" type="file" accept="image/png,image/jpeg" class="oculto" />
+                <button id="btnImagen" class="icon-btn" type="button" disabled title="Adjuntar imagen" aria-label="Adjuntar imagen">
+                    <span class="icon">📎</span>
+                </button>
                 <button id="btn" disabled>
                     <span class="icon">➤</span>
                 </button>
             </div>
+            <div id="estadoSubida" class="upload-hint"></div>
         </div>
     </div>
 
@@ -821,6 +915,9 @@
         const input = document.getElementById("input");
         const btn = document.getElementById("btn");
         const lista = document.getElementById("mensajes");
+        const fileInput = document.getElementById("fileInput");
+        const btnImagen = document.getElementById("btnImagen");
+        const estadoSubida = document.getElementById("estadoSubida");
 
         const claveCifradoInput = document.getElementById("claveCifrado");
         const btnClave = document.getElementById("btnClave");
@@ -844,6 +941,8 @@
 
         const CLAVE_UNICA = "Linux";
         const PASS_STORAGE_KEY = "chatE2E_pass_v1";
+        const MAX_UPLOAD_BYTES = 10 * 1024 * 1024; // 10MB
+        const MIME_PERMITIDOS = ["image/png", "image/jpeg"];
 
         // Por defecto, ocultar logout hasta estar autenticado
         if (btnLogout) btnLogout.style.display = "none";
@@ -956,7 +1055,7 @@
 
         // ---------- UI MENSAJES ----------
 
-        function agregarMensajeALaLista(data) {
+        function crearContenedorMensaje(data) {
             const li = document.createElement("li");
             li.classList.add("mensaje");
 
@@ -971,33 +1070,93 @@
                 li.classList.add("otro");
             }
 
+            return li;
+        }
+
+        function agregarMensajeTexto(data) {
+            const li = crearContenedorMensaje(data);
             li.innerHTML = `
       <div class="texto">${data.texto}</div>
-      <div class="hora">${data.fecha}</div>
+      <div class="hora">${data.fecha || ""}</div>
     `;
+            lista.appendChild(li);
+            lista.scrollTop = lista.scrollHeight;
+        }
 
+        function agregarMensajeImagen(data) {
+            const li = crearContenedorMensaje(data);
+            const bubble = document.createElement("div");
+            bubble.className = "imagen-bubble";
+
+            const link = document.createElement("a");
+            link.href = data.urlFull;
+            link.target = "_blank";
+            link.rel = "noopener";
+
+            const img = document.createElement("img");
+            img.loading = "lazy";
+            img.src = data.urlThumb || data.urlFull;
+            img.alt = data.nombreOriginal || "Imagen compartida";
+            img.className = "imagen-thumb";
+            link.appendChild(img);
+
+            const meta = document.createElement("div");
+            meta.className = "imagen-meta";
+
+            const titulo = document.createElement("span");
+            titulo.textContent = data.nombreOriginal || "Imagen";
+
+            const descarga = document.createElement("a");
+            descarga.className = "download-chip";
+            descarga.href = data.urlFull;
+            descarga.download = data.nombreOriginal || "imagen";
+            descarga.textContent = "Descargar";
+
+            const hora = document.createElement("span");
+            hora.className = "hora";
+            hora.textContent = data.fecha || "";
+
+            meta.appendChild(titulo);
+            meta.appendChild(descarga);
+
+            bubble.appendChild(link);
+            bubble.appendChild(meta);
+            bubble.appendChild(hora);
+
+            li.appendChild(bubble);
             lista.appendChild(li);
             lista.scrollTop = lista.scrollHeight;
         }
 
         async function procesarBufferSiClaveLista() {
-            if (!cryptoKey || bufferMensajesPendientes.length === 0) return;
+            if (bufferMensajesPendientes.length === 0) return;
 
             const pendientes = bufferMensajesPendientes;
             bufferMensajesPendientes = [];
 
             for (const m of pendientes) {
+                const tipo = m.tipo || (m.cipherText ? "texto" : "imagen");
+
+                if (tipo === "imagen") {
+                    agregarMensajeImagen(m);
+                    continue;
+                }
+
+                if (!cryptoKey) {
+                    bufferMensajesPendientes.push(m);
+                    continue;
+                }
+
                 try {
                     const texto = await decryptText(m.cipherText, m.iv);
-                    agregarMensajeALaLista({
+                    agregarMensajeTexto({
                         autor: m.autor,
                         texto,
                         fecha: m.fecha,
                     });
                 } catch (err) {
                     console.warn("No se pudo descifrar un mensaje:", err);
-                    const li = document.createElement("li");
-                    li.classList.add("mensaje", "otro", "nuevo-grupo");
+                    const li = crearContenedorMensaje({ autor: m.autor });
                     li.innerHTML = `
           <div class="texto">[No se pudo descifrar el mensaje]</div>
           <div class="hora">${m.fecha}</div>
@@ -1005,6 +1164,8 @@
                     lista.appendChild(li);
                 }
             }
+
+            lista.scrollTop = lista.scrollHeight;
         }
 
         // ---------- CONFIGURAR CLAVE DE CIFRADO ----------
@@ -1047,6 +1208,7 @@
                 mensajeLogin.style.color = "#16a34a";
                 input.disabled = false;
                 btn.disabled = false;
+                if (btnImagen) btnImagen.disabled = false;
                 estado.textContent = "Conectado (clave configurada)";
 
                 document.getElementById("login").classList.add("oculto");
@@ -1073,6 +1235,8 @@
             document.getElementById("login").classList.remove("oculto");
             input.disabled = true;
             btn.disabled = true;
+            if (btnImagen) btnImagen.disabled = true;
+            setEstadoSubida("");
 
             // Ocultar logout al quedar no autorizado
             if (btnLogout) btnLogout.style.display = "none";
@@ -1097,6 +1261,71 @@
         });
 
         // ---------- ENVÍO DE MENSAJES ----------
+
+        function setEstadoSubida(texto, color = "#6b7280") {
+            if (!estadoSubida) return;
+            estadoSubida.textContent = texto || "";
+            estadoSubida.style.color = color;
+        }
+
+        async function manejarArchivoImagen(file) {
+            if (!file) return;
+
+            if (!claveValidaIngresada) {
+                setEstadoSubida("Primero ingresa la clave correcta.", "salmon");
+                return;
+            }
+
+            if (!MIME_PERMITIDOS.includes(file.type)) {
+                setEstadoSubida("Solo se permiten PNG o JPG.", "salmon");
+                return;
+            }
+
+            if (file.size > MAX_UPLOAD_BYTES) {
+                setEstadoSubida("Imagen demasiado grande (max 10MB).", "salmon");
+                return;
+            }
+
+            try {
+                setEstadoSubida("Subiendo imagen...", "#2563eb");
+
+                const formData = new FormData();
+                formData.append("imagen", file);
+                formData.append("autor", miAutorId || "anon");
+
+                const resp = await fetch("/upload", {
+                    method: "POST",
+                    body: formData,
+                    headers: { "x-chat-key": CLAVE_UNICA },
+                });
+
+                if (!resp.ok) {
+                    const errText = await resp.text();
+                    throw new Error(errText || "Error subiendo imagen");
+                }
+
+                await resp.json();
+                setEstadoSubida("Imagen enviada.", "#16a34a");
+                setTimeout(() => setEstadoSubida(""), 2000);
+            } catch (err) {
+                console.error("Error subiendo imagen:", err);
+                setEstadoSubida("Error subiendo imagen.", "salmon");
+            } finally {
+                if (fileInput) fileInput.value = "";
+            }
+        }
+
+        if (btnImagen && fileInput) {
+            btnImagen.addEventListener("click", () => {
+                if (btnImagen.disabled) return;
+                fileInput.click();
+            });
+
+            fileInput.addEventListener("change", () => {
+                const file = fileInput.files?.[0];
+                if (file) manejarArchivoImagen(file);
+            });
+        }
 
         btn.onclick = async () => {
             if (!cryptoKey) {
@@ -1138,6 +1367,8 @@
                 ? "Conectado (clave configurada)"
                 : "Conectado (esperando clave de cifrado)";
 
+            if (btnImagen) btnImagen.disabled = !cryptoKey;
+
             // NO mostramos logout aquí; se mostrará solo tras auth-ok
             if (btnLogout) btnLogout.style.display = cryptoKey ? "inline-flex" : "none";
 
@@ -1151,6 +1382,8 @@
             estado.textContent = "Desconectado";
             input.disabled = true;
             btn.disabled = true;
+            if (btnImagen) btnImagen.disabled = true;
+            setEstadoSubida("");
 
             // Al desconectarse, ocultar logout
             if (btnLogout) btnLogout.style.display = "none";
@@ -1188,6 +1421,8 @@
                 bufferMensajesPendientes = [];
                 input.disabled = true;
                 btn.disabled = true;
+                if (btnImagen) btnImagen.disabled = true;
+                setEstadoSubida("");
 
                 // Mostrar barra de login de nuevo por si no redirige
                 const loginBar = document.getElementById("login");

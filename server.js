@@ -13,6 +13,10 @@ const express = require("express");
 const app = express();
 const http = require("http").createServer(app);
 const io = require("socket.io")(http);
+const path = require("path");
+const fs = require("fs");
+const multer = require("multer");
+const sharp = require("sharp");
 
 // Clave unica permitida para acceder al chat
 const CLAVE_UNICA = "Linux";
@@ -34,10 +38,16 @@ if (MONGODB_URI) {
 
     const mensajeSchema = new mongoose.Schema(
         {
+            tipo: { type: String, default: "texto" },
             autor: String,
             cipherText: String,
             iv: String,
             fecha: String,
+            urlFull: String,
+            urlThumb: String,
+            mime: String,
+            size: Number,
+            nombreOriginal: String,
         },
         { timestamps: true }
     );
@@ -51,6 +61,68 @@ if (MONGODB_URI) {
 // Cada elemento: { autor, cipherText, iv, fecha }
 const mensajes = [];
 const MAX_MENSAJES = 120;
+const uploadDir = path.join(__dirname, "public", "uploads");
+const MAX_UPLOAD_MB = 10;
+
+fs.mkdirSync(uploadDir, { recursive: true });
+
+const storage = multer.diskStorage({
+    destination: (_req, _file, cb) => cb(null, uploadDir),
+    filename: (_req, file, cb) => {
+        const ext = path.extname(file.originalname).toLowerCase();
+        const safeExt = ext === ".png" || ext === ".jpg" || ext === ".jpeg" ? ext : ".jpg";
+        const unique = Date.now() + "-" + Math.round(Math.random() * 1e9);
+        cb(null, `img-${unique}${safeExt}`);
+    },
+});
+
+const upload = multer({
+    storage,
+    limits: { fileSize: MAX_UPLOAD_MB * 1024 * 1024 },
+    fileFilter: (_req, file, cb) => {
+        const allowed = ["image/png", "image/jpeg", "image/jpg"];
+        if (allowed.includes(file.mimetype)) return cb(null, true);
+        cb(new Error("Tipo de archivo no permitido"));
+    },
+});
+
+function normalizarMensaje(raw) {
+    const tipo = raw.tipo || (raw.cipherText ? "texto" : "imagen");
+    return {
+        tipo,
+        autor: raw.autor,
+        cipherText: raw.cipherText,
+        iv: raw.iv,
+        fecha: raw.fecha || new Date().toLocaleTimeString(),
+        urlFull: raw.urlFull,
+        urlThumb: raw.urlThumb,
+        mime: raw.mime,
+        size: raw.size,
+        nombreOriginal: raw.nombreOriginal,
+    };
+}
+
+async function guardarMensajeEnDB(mensaje) {
+    if (!MensajeModel) return;
+
+    try {
+        const doc = new MensajeModel(mensaje);
+        await doc.save();
+
+        const count = await MensajeModel.countDocuments();
+        if (count > MAX_MENSAJES) {
+            const toDelete = count - MAX_MENSAJES;
+            await MensajeModel.find()
+                .sort({ createdAt: 1 })
+                .limit(toDelete)
+                .deleteMany();
+
+            console.log(`[DB] Eliminados ${toDelete} mensajes antiguos de MongoDB.`);
+        }
+    } catch (err) {
+        console.error("[DB] Error guardando mensaje:", err.message);
+    }
+}
 
 async function obtenerHistorial() {
     if (MensajeModel) {
@@ -59,19 +131,20 @@ async function obtenerHistorial() {
                 .sort({ createdAt: -1 })
                 .limit(MAX_MENSAJES)
                 .lean();
-            return docs.reverse();
+            return docs.reverse().map(normalizarMensaje);
         } catch (err) {
             console.error(colors.red, "[DB] Error leyendo historial:", err.message, colors.reset);
-            return mensajes;
+            return mensajes.map(normalizarMensaje);
         }
     }
 
-    return mensajes;
+    return mensajes.map(normalizarMensaje);
 }
 
-// Servir archivos estáticos desde la carpeta "public"
+// Servir archivos estaticos desde la carpeta "public"
 app.use(express.static("public"));
 app.use(express.json());
+app.use(express.urlencoded({ extended: true }));
 
 function clearCookieVariants(res, name, req) {
     // Intentamos limpiar con varias combinaciones comunes
@@ -97,12 +170,12 @@ function clearCookieVariants(res, name, req) {
         }
     }
 
-    // También en path vacío / (a veces apps lo setean distinto)
+    // Tambien en path vacio / (a veces apps lo setean distinto)
     res.clearCookie(name, { ...base, path: "/" });
 }
 
 app.post("/logout", (req, res) => {
-    // Limpia cookies típicas (por si tu “página principal” o proxy las usa)
+    // Limpia cookies tipicas (por si tu pagina principal o proxy las usa)
     const cookieNamesToClear = [
         process.env.COOKIE_NAME, // si defines COOKIE_NAME en .env
         "token",
@@ -116,14 +189,83 @@ app.post("/logout", (req, res) => {
         clearCookieVariants(res, name, req);
     }
 
-    // Si un día manejas sesiones/token, aquí sería el lugar para invalidarlas (logout global real)
+    // Si un dia manejas sesiones/token, aqui seria el lugar para invalidarlas (logout global real)
     return res.status(204).end();
 });
 
+async function crearMiniaturaPixelada(inputPath, outputPath) {
+    // Crea una miniatura "pixelada": baja la resolucion y la reescala con kernel nearest
+    await sharp(inputPath)
+        .resize({ width: 160, withoutEnlargement: true })
+        .resize({ width: 320, kernel: sharp.kernel.nearest })
+        .jpeg({ quality: 45 })
+        .toFile(outputPath);
+}
 
-// (Opcional) función para generar un id anónimo corto a partir del socket.id
+app.post("/upload", upload.single("imagen"), async (req, res) => {
+    if (req.headers["x-chat-key"] !== CLAVE_UNICA) {
+        return res.status(401).json({ error: "No autorizado" });
+    }
+
+    const archivo = req.file;
+    if (!archivo) {
+        return res.status(400).json({ error: "No se recibio archivo" });
+    }
+
+    try {
+        const baseName = path.parse(archivo.filename).name;
+        const thumbName = `${baseName}-thumb.jpg`;
+        const thumbPath = path.join(uploadDir, thumbName);
+
+        await crearMiniaturaPixelada(archivo.path, thumbPath);
+
+        const urlFull = `/uploads/${archivo.filename}`;
+        const urlThumb = `/uploads/${thumbName}`;
+        const fecha = new Date().toLocaleTimeString();
+        const autor = (req.body?.autor || "").slice(0, 50) || "anon";
+
+        const mensajeImagen = normalizarMensaje({
+            tipo: "imagen",
+            autor,
+            urlFull,
+            urlThumb,
+            fecha,
+            nombreOriginal: archivo.originalname,
+            mime: archivo.mimetype,
+            size: archivo.size,
+        });
+
+        mensajes.push(mensajeImagen);
+        if (mensajes.length > MAX_MENSAJES) {
+            mensajes.shift();
+        }
+
+        guardarMensajeEnDB(mensajeImagen);
+
+        io.to("autorizados").emit("mensaje", mensajeImagen);
+
+        return res.json({ urlFull, urlThumb, fecha });
+    } catch (err) {
+        console.error("[Upload] Error procesando imagen:", err.message);
+        return res.status(500).json({ error: "Error procesando la imagen" });
+    }
+});
+
+// Manejo simple de errores (multer, etc.)
+app.use((err, _req, res, _next) => {
+    console.error("[Error]", err.message);
+    const esMulter = err.code === "LIMIT_FILE_SIZE" || err.message === "Tipo de archivo no permitido";
+    const status = esMulter ? 400 : 500;
+    const mensaje =
+        err.code === "LIMIT_FILE_SIZE"
+            ? `Archivo demasiado grande (max ${MAX_UPLOAD_MB}MB)`
+            : err.message || "Error en el servidor";
+    res.status(status).json({ error: mensaje });
+});
+
+// Funcion para generar un id anonimo corto a partir del socket.id
 function generarIdAnonimo(socketId) {
-    // Solo para agrupar mensajes / logs. NO se muestra al usuario como “nombre”.
+    // Solo para agrupar mensajes / logs. NO se muestra al usuario como "nombre".
     return "anon-" + socketId.slice(0, 5);
 }
 
@@ -134,7 +276,7 @@ io.on("connection", async (socket) => {
         `${colors.cyan}[+] Nuevo socket conectado:${colors.reset} ${socket.id} (${idAnonimo})`
     );
 
-    // Enviar al cliente su "identidad" anónima para que sepa cuáles mensajes son suyos
+    // Enviar al cliente su "identidad" anonima para que sepa cuales mensajes son suyos
     socket.emit("identidad", { autor: idAnonimo });
 
     let autorizado = false;
@@ -171,7 +313,7 @@ io.on("connection", async (socket) => {
         }
 
         console.log(`${colors.magenta}========== MENSAJE CIFRADO RECIBIDO ==========${colors.reset}`);
-        console.log(`${colors.yellow}Autor anónimo:${colors.reset}`, idAnonimo);
+        console.log(`${colors.yellow}Autor anonimo:${colors.reset}`, idAnonimo);
         console.log(`${colors.yellow}CipherText:${colors.reset}`, data.cipherText);
         console.log(`${colors.yellow}IV:${colors.reset}`, data.iv);
         console.log(`${colors.yellow}Fecha:${colors.reset}`, data.fecha);
@@ -182,17 +324,18 @@ io.on("connection", async (socket) => {
         const fecha = data?.fecha || new Date().toLocaleTimeString();
 
         if (!cipherText || !iv) {
-            console.log("Mensaje inválido recibido (falta cipherText o iv).");
+            console.log("Mensaje invalido recibido (falta cipherText o iv).");
             return;
         }
 
-        // El servidor NO sabe el texto original, solo reenvía y guarda cifrado
-        const mensaje = {
-            autor: idAnonimo, // ID anónimo, NO es un nombre de usuario
+        // El servidor NO sabe el texto original, solo reenvia y guarda cifrado
+        const mensaje = normalizarMensaje({
+            tipo: "texto",
+            autor: idAnonimo, // ID anonimo, NO es un nombre de usuario
             cipherText,
             iv,
             fecha,
-        };
+        });
 
         // Guardar el mensaje cifrado en el array en memoria
         mensajes.push(mensaje);
@@ -200,32 +343,8 @@ io.on("connection", async (socket) => {
             mensajes.shift();
         }
 
-        // Guardar en DB si está configurada
-        // Guardar en DB si está configurada
-        if (MensajeModel) {
-            const doc = new MensajeModel(mensaje);
-
-            doc.save()
-                .then(async () => {
-                    // Mantener SOLO los últimos MAX_MENSAJES en la BASE DE DATOS
-                    const count = await MensajeModel.countDocuments();
-
-                    if (count > MAX_MENSAJES) {
-                        const toDelete = count - MAX_MENSAJES;
-
-                        await MensajeModel.find()
-                            .sort({ createdAt: 1 }) // más viejos primero
-                            .limit(toDelete)
-                            .deleteMany();
-
-                        console.log(`[DB] Eliminados ${toDelete} mensajes antiguos de MongoDB.`);
-                    }
-                })
-                .catch((err) => {
-                    console.error("[DB] Error guardando mensaje:", err.message);
-                });
-        }
-
+        // Guardar en DB si esta configurada
+        guardarMensajeEnDB(mensaje);
 
         // Enviar el mensaje cifrado solo a clientes autorizados
         io.to("autorizados").emit("mensaje", mensaje);
@@ -240,7 +359,5 @@ io.on("connection", async (socket) => {
 
 const PORT = process.env.PORT || 3000;
 http.listen(PORT, () => {
-    console.log(
-        `${colors.green}Servidor corriendo en puerto:${colors.reset} ${PORT}`
-    );
+    console.log(`${colors.green}Servidor corriendo en puerto:${colors.reset} ${PORT}`);
 });
