@@ -315,6 +315,102 @@ html[data-theme="dark"] #login input {
     color: var(--text-dim, #6b7280);
 }
 
+/* Reacciones */
+.reacciones {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    flex-wrap: wrap;
+    margin-top: 4px;
+}
+
+.reacciones-list {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+}
+
+.reaction-chip {
+    border: 1px solid var(--border);
+    background: var(--surface);
+    color: var(--text);
+    padding: 3px 8px;
+    border-radius: 999px;
+    font-size: 0.75rem;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    box-shadow: 0 6px 14px rgba(0, 0, 0, 0.08);
+    transition: transform 0.08s ease, box-shadow 0.08s ease, border-color 0.12s ease;
+}
+
+.reaction-chip:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 10px 20px rgba(0, 0, 0, 0.12);
+    border-color: var(--border-strong);
+}
+
+.reaction-chip.mine {
+    border-color: var(--accent);
+    box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.12), 0 8px 16px rgba(0, 0, 0, 0.08);
+}
+
+.reaction-add {
+    width: 32px;
+    height: 32px;
+    border-radius: 999px;
+    border: 1px dashed var(--border-strong);
+    background: var(--surface-2);
+    color: var(--text);
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.9rem;
+    transition: transform 0.08s ease, box-shadow 0.08s ease, border-color 0.12s ease, background-color 0.12s ease;
+}
+
+.reaction-add:hover {
+    transform: translateY(-1px);
+    border-color: var(--accent);
+    box-shadow: 0 6px 14px rgba(0, 0, 0, 0.10);
+    background: var(--surface);
+}
+
+.reaction-add:active {
+    transform: translateY(0);
+}
+
+.reaction-picker {
+    position: absolute;
+    padding: 6px 8px;
+    border-radius: 14px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    box-shadow: 0 10px 28px rgba(0, 0, 0, 0.18);
+    display: flex;
+    gap: 6px;
+    z-index: 20;
+}
+
+.reaction-picker button {
+    width: 34px;
+    height: 34px;
+    border-radius: 10px;
+    border: 1px solid transparent;
+    background: transparent;
+    cursor: pointer;
+    font-size: 1.1rem;
+    transition: transform 0.1s ease, box-shadow 0.1s ease, border-color 0.12s ease;
+}
+
+.reaction-picker button:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 8px 16px rgba(0, 0, 0, 0.12);
+    border-color: var(--border-strong);
+}
+
 /* Barra inferior de envío */
 #formulario {
     display: flex;

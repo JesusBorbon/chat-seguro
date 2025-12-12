@@ -20,6 +20,7 @@ const sharp = require("sharp");
 
 // Clave unica permitida para acceder al chat
 const CLAVE_UNICA = "Linux";
+const EMOJIS_PERMITIDOS = ["❤️", "👍", "😂", "😮", "🙏", "🔥"];
 
 const MONGODB_URI = process.env.MONGODB_URI || null;
 let MensajeModel = null;
@@ -48,6 +49,8 @@ if (MONGODB_URI) {
             mime: String,
             size: Number,
             nombreOriginal: String,
+            messageId: { type: String, index: true },
+            reacciones: { type: Object, default: {} },
         },
         { timestamps: true }
     );
@@ -65,6 +68,11 @@ const uploadDir = path.join(__dirname, "public", "uploads");
 const MAX_UPLOAD_MB = 10;
 
 fs.mkdirSync(uploadDir, { recursive: true });
+
+function buscarMensajePorId(messageId) {
+    if (!messageId) return null;
+    return mensajes.find((m) => m.id === messageId || m.messageId === messageId);
+}
 
 const storage = multer.diskStorage({
     destination: (_req, _file, cb) => cb(null, uploadDir),
@@ -86,9 +94,19 @@ const upload = multer({
     },
 });
 
+function generarMensajeId() {
+    return "msg-" + Date.now().toString(36) + "-" + Math.random().toString(36).slice(2, 7);
+}
+
 function normalizarMensaje(raw) {
     const tipo = raw.tipo || (raw.cipherText ? "texto" : "imagen");
+    const messageId =
+        raw.id || raw.messageId || (raw._id ? String(raw._id) : null) || generarMensajeId();
+    const reacciones =
+        raw.reacciones && typeof raw.reacciones === "object" ? raw.reacciones : {};
     return {
+        id: messageId,
+        messageId,
         tipo,
         autor: raw.autor,
         cipherText: raw.cipherText,
@@ -99,6 +117,7 @@ function normalizarMensaje(raw) {
         mime: raw.mime,
         size: raw.size,
         nombreOriginal: raw.nombreOriginal,
+        reacciones,
     };
 }
 
@@ -131,7 +150,10 @@ async function obtenerHistorial() {
                 .sort({ createdAt: -1 })
                 .limit(MAX_MENSAJES)
                 .lean();
-            return docs.reverse().map(normalizarMensaje);
+            const normalizados = docs.reverse().map(normalizarMensaje);
+            mensajes.length = 0;
+            mensajes.push(...normalizados);
+            return normalizados;
         } catch (err) {
             console.error(colors.red, "[DB] Error leyendo historial:", err.message, colors.reset);
             return mensajes.map(normalizarMensaje);
@@ -225,6 +247,7 @@ app.post("/upload", upload.single("imagen"), async (req, res) => {
         const autor = (req.body?.autor || "").slice(0, 50) || "anon";
 
         const mensajeImagen = normalizarMensaje({
+            id: generarMensajeId(),
             tipo: "imagen",
             autor,
             urlFull,
@@ -233,6 +256,7 @@ app.post("/upload", upload.single("imagen"), async (req, res) => {
             nombreOriginal: archivo.originalname,
             mime: archivo.mimetype,
             size: archivo.size,
+            reacciones: {},
         });
 
         mensajes.push(mensajeImagen);
@@ -330,11 +354,13 @@ io.on("connection", async (socket) => {
 
         // El servidor NO sabe el texto original, solo reenvia y guarda cifrado
         const mensaje = normalizarMensaje({
+            id: generarMensajeId(),
             tipo: "texto",
             autor: idAnonimo, // ID anonimo, NO es un nombre de usuario
             cipherText,
             iv,
             fecha,
+            reacciones: {},
         });
 
         // Guardar el mensaje cifrado en el array en memoria
@@ -348,6 +374,67 @@ io.on("connection", async (socket) => {
 
         // Enviar el mensaje cifrado solo a clientes autorizados
         io.to("autorizados").emit("mensaje", mensaje);
+    });
+
+    socket.on("reaccion", async (payload = {}) => {
+        if (!autorizado) {
+            console.log(
+                `${colors.red}[!] Socket no autorizado intentando reaccionar:${colors.reset} ${socket.id}`
+            );
+            return;
+        }
+
+        const mensajeId = String(payload.mensajeId || "").trim();
+        const emoji = String(payload.emoji || "").trim();
+
+        if (!mensajeId || !emoji || !EMOJIS_PERMITIDOS.includes(emoji)) {
+            return;
+        }
+
+        const mensaje = buscarMensajePorId(mensajeId);
+        if (!mensaje) return;
+
+        const actuales = Array.isArray(mensaje.reacciones?.[emoji])
+            ? [...mensaje.reacciones[emoji]]
+            : [];
+        const yaReacciono = actuales.includes(idAnonimo);
+
+        const nuevoListado = yaReacciono
+            ? actuales.filter((u) => u !== idAnonimo)
+            : Array.from(new Set([...actuales, idAnonimo]));
+
+        const reaccionesActualizadas = {
+            ...mensaje.reacciones,
+            [emoji]: nuevoListado,
+        };
+
+        for (const [k, lista] of Object.entries(reaccionesActualizadas)) {
+            if (!Array.isArray(lista) || lista.length === 0) {
+                delete reaccionesActualizadas[k];
+            }
+        }
+
+        mensaje.reacciones = reaccionesActualizadas;
+
+        if (MensajeModel) {
+            const filtro = mensaje.messageId
+                ? { $or: [{ messageId: mensaje.messageId }, { _id: mensaje.messageId }] }
+                : { _id: mensaje.id };
+
+            try {
+                await MensajeModel.updateOne(filtro, {
+                    reacciones: mensaje.reacciones,
+                    messageId: mensaje.messageId || mensaje.id,
+                });
+            } catch (err) {
+                console.error(colors.red, "[DB] Error guardando reacciones:", err.message, colors.reset);
+            }
+        }
+
+        io.to("autorizados").emit("reaccion-actualizada", {
+            mensajeId: mensaje.messageId || mensaje.id,
+            reacciones: mensaje.reacciones,
+        });
     });
 
     socket.on("disconnect", () => {

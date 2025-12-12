@@ -96,11 +96,15 @@
         let ultimoAutor = null; // para agrupar mensajes consecutivos de la misma persona
         let bufferMensajesPendientes = []; // mensajes recibidos antes de tener la clave
         let claveValidaIngresada = false; // indica si ya se ingreso la clave permitida
+        const mensajesRenderizados = new Map(); // cache por id para reacciones
 
         const CLAVE_UNICA = "Linux";
         const PASS_STORAGE_KEY = "chatE2E_pass_v1";
         const MAX_UPLOAD_BYTES = 10 * 1024 * 1024; // 10MB
         const MIME_PERMITIDOS = ["image/png", "image/jpeg"];
+        const EMOJIS_REACCIONES = ["❤️", "👍", "😂", "😮", "🙏", "🔥"];
+        const EMOJI_POR_DEFECTO = "❤️";
+        const PICKER_DELAY_MS = 420;
 
         // Por defecto, ocultar logout hasta estar autenticado
         if (btnLogout) btnLogout.style.display = "none";
@@ -212,10 +216,74 @@
         }
 
         // ---------- UI MENSAJES ----------
+        const reactionPicker = document.createElement("div");
+        reactionPicker.className = "reaction-picker oculto";
+        EMOJIS_REACCIONES.forEach((emoji) => {
+            const btn = document.createElement("button");
+            btn.type = "button";
+            btn.textContent = emoji;
+            btn.addEventListener("click", (e) => {
+                e.stopPropagation();
+                if (!reactionPicker.dataset.mid) return;
+                toggleReaccion(reactionPicker.dataset.mid, emoji);
+                cerrarPicker();
+            });
+            reactionPicker.appendChild(btn);
+        });
+        document.body.appendChild(reactionPicker);
+
+        function cerrarPicker() {
+            reactionPicker.classList.add("oculto");
+            reactionPicker.dataset.mid = "";
+        }
+
+        function abrirPicker(mensajeId, anchorEl) {
+            if (!mensajeId) return;
+            reactionPicker.dataset.mid = mensajeId;
+            reactionPicker.classList.remove("oculto");
+            const rect = anchorEl.getBoundingClientRect();
+            const top = rect.top + window.scrollY - 56;
+            const left = rect.left + window.scrollX + rect.width / 2 - reactionPicker.offsetWidth / 2;
+            reactionPicker.style.top = `${top}px`;
+            reactionPicker.style.left = `${left}px`;
+        }
+
+        document.addEventListener("click", (e) => {
+            if (reactionPicker.classList.contains("oculto")) return;
+            if (reactionPicker.contains(e.target)) return;
+            cerrarPicker();
+        });
+        function asegurarReacciones(obj) {
+            if (!obj) return {};
+            if (obj.reacciones && typeof obj.reacciones === "object") return obj.reacciones;
+            return {};
+        }
+
+        function registrarMensaje(data) {
+            const id = data.id || data.messageId || data._id;
+            if (!id) return null;
+            const existente = mensajesRenderizados.get(id);
+            const reacciones =
+                data.reacciones && typeof data.reacciones === "object"
+                    ? data.reacciones
+                    : existente?.reacciones || {};
+            const normalizado = {
+                ...existente,
+                ...data,
+                id,
+                messageId: data.messageId || id,
+                reacciones,
+            };
+            mensajesRenderizados.set(id, normalizado);
+            return normalizado;
+        }
 
         function crearContenedorMensaje(data) {
             const li = document.createElement("li");
             li.classList.add("mensaje");
+
+            const mid = data.id || data.messageId || data._id;
+            if (mid) li.dataset.mid = mid;
 
             if (data.autor !== ultimoAutor) {
                 li.classList.add("nuevo-grupo");
@@ -228,7 +296,79 @@
                 li.classList.add("otro");
             }
 
+            // Long press en el mensaje para abrir picker
+            if (mid) {
+                let holdTimer = null;
+                let longPress = false;
+                const clearTimer = () => {
+                    if (holdTimer) {
+                        clearTimeout(holdTimer);
+                        holdTimer = null;
+                    }
+                };
+                li.addEventListener("pointerdown", (e) => {
+                    if (e.target.closest("button")) return;
+                    longPress = false;
+                    holdTimer = setTimeout(() => {
+                        longPress = true;
+                        abrirPicker(mid, li);
+                    }, PICKER_DELAY_MS);
+                });
+                li.addEventListener("pointerup", () => {
+                    const fue = longPress;
+                    clearTimer();
+                    if (fue) return;
+                    // No hacemos nada en tap corto para no mostrar corazones
+                });
+                li.addEventListener("pointerleave", clearTimer);
+            }
+
             return li;
+        }
+
+        function toggleReaccion(mensajeId, emoji) {
+            if (!mensajeId || !emoji) return;
+            if (!claveValidaIngresada) return;
+            socket.emit("reaccion", { mensajeId, emoji });
+        }
+
+        function renderReacciones(li, data) {
+            const mensajeId = data.id || data.messageId || data._id;
+            if (!mensajeId) return;
+
+            const existente = li.querySelector(".reacciones");
+            if (existente) existente.remove();
+
+            const reacciones = asegurarReacciones(data);
+            const chips = Object.entries(reacciones).filter(
+                ([, autores]) => Array.isArray(autores) && autores.length
+            );
+
+            // Si no hay reacciones, no mostramos barra
+            if (!chips.length) return;
+
+            const bar = document.createElement("div");
+            bar.className = "reacciones";
+
+            const list = document.createElement("div");
+            list.className = "reacciones-list";
+
+            chips.forEach(([emoji, autores]) => {
+                const usuarios = Array.isArray(autores) ? autores : [];
+                const chip = document.createElement("button");
+                chip.type = "button";
+                chip.className = "reaction-chip";
+                chip.dataset.emoji = emoji;
+                if (miAutorId && usuarios.includes(miAutorId)) chip.classList.add("mine");
+                chip.textContent = `${emoji} ${usuarios.length}`;
+                chip.addEventListener("click", (e) => {
+                    e.stopPropagation();
+                    toggleReaccion(mensajeId, emoji);
+                });
+                list.appendChild(chip);
+            });
+            bar.appendChild(list);
+            li.appendChild(bar);
         }
 
         function agregarMensajeTexto(data) {
@@ -237,6 +377,7 @@
       <div class="texto">${data.texto}</div>
       <div class="hora">${data.fecha || ""}</div>
     `;
+            renderReacciones(li, data);
             lista.appendChild(li);
             lista.scrollTop = lista.scrollHeight;
         }
@@ -282,6 +423,7 @@
             bubble.appendChild(hora);
 
             li.appendChild(bubble);
+            renderReacciones(li, data);
             lista.appendChild(li);
             lista.scrollTop = lista.scrollHeight;
         }
@@ -294,9 +436,17 @@
 
             for (const m of pendientes) {
                 const tipo = m.tipo || (m.cipherText ? "texto" : "imagen");
+                const messageId = m.id || m.messageId || m._id;
+                const baseMensaje =
+                    registrarMensaje({
+                        ...m,
+                        id: messageId,
+                        messageId: m.messageId || messageId,
+                        reacciones: asegurarReacciones(m),
+                    }) || m;
 
                 if (tipo === "imagen") {
-                    agregarMensajeImagen(m);
+                    agregarMensajeImagen(baseMensaje);
                     continue;
                 }
 
@@ -307,18 +457,20 @@
 
                 try {
                     const texto = await decryptText(m.cipherText, m.iv);
-                    agregarMensajeTexto({
-                        autor: m.autor,
-                        texto,
-                        fecha: m.fecha,
-                    });
+                    const mensajeTexto =
+                        registrarMensaje({
+                            ...baseMensaje,
+                            texto,
+                        }) || { ...baseMensaje, texto };
+                    agregarMensajeTexto(mensajeTexto);
                 } catch (err) {
                     console.warn("No se pudo descifrar un mensaje:", err);
-                    const li = crearContenedorMensaje({ autor: m.autor });
+                    const li = crearContenedorMensaje(baseMensaje);
                     li.innerHTML = `
           <div class="texto">[No se pudo descifrar el mensaje]</div>
           <div class="hora">${m.fecha}</div>
         `;
+                    renderReacciones(li, baseMensaje);
                     lista.appendChild(li);
                 }
             }
@@ -409,6 +561,7 @@
         socket.on("historial", (mensajesCifrados) => {
             lista.innerHTML = "";
             ultimoAutor = null;
+            mensajesRenderizados.clear();
             bufferMensajesPendientes.push(...mensajesCifrados);
             procesarBufferSiClaveLista();
         });
@@ -416,6 +569,23 @@
         socket.on("mensaje", (m) => {
             bufferMensajesPendientes.push(m);
             procesarBufferSiClaveLista();
+        });
+
+        socket.on("reaccion-actualizada", ({ mensajeId, reacciones }) => {
+            if (!mensajeId) return;
+            const reacc = asegurarReacciones({ reacciones });
+            const existente = mensajesRenderizados.get(mensajeId);
+            if (existente) {
+                existente.reacciones = reacc;
+                mensajesRenderizados.set(mensajeId, existente);
+            } else {
+                mensajesRenderizados.set(mensajeId, { id: mensajeId, reacciones: reacc });
+            }
+
+            const li = lista.querySelector(`li[data-mid=\"${mensajeId}\"]`);
+            if (li) {
+                renderReacciones(li, { id: mensajeId, reacciones: reacc });
+            }
         });
 
         // ---------- ENVÍO DE MENSAJES ----------
