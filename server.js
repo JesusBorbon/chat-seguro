@@ -14,6 +14,8 @@ const app = express();
 const http = require("http").createServer(app);
 const io = require("socket.io")(http);
 
+// Clave unica permitida para acceder al chat
+const CLAVE_UNICA = "Linuxeros";
 
 const MONGODB_URI = process.env.MONGODB_URI || null;
 let MensajeModel = null;
@@ -50,6 +52,23 @@ if (MONGODB_URI) {
 const mensajes = [];
 const MAX_MENSAJES = 100;
 
+async function obtenerHistorial() {
+    if (MensajeModel) {
+        try {
+            const docs = await MensajeModel.find()
+                .sort({ createdAt: -1 })
+                .limit(MAX_MENSAJES)
+                .lean();
+            return docs.reverse();
+        } catch (err) {
+            console.error(colors.red, "[DB] Error leyendo historial:", err.message, colors.reset);
+            return mensajes;
+        }
+    }
+
+    return mensajes;
+}
+
 // Servir archivos estáticos desde la carpeta "public"
 app.use(express.static("public"));
 
@@ -69,28 +88,29 @@ io.on("connection", async (socket) => {
     // Enviar al cliente su "identidad" anónima para que sepa cuáles mensajes son suyos
     socket.emit("identidad", { autor: idAnonimo });
 
-    // En este modo, TODOS están autorizados al conectarse
-    const autorizado = true;
+    let autorizado = false;
 
-    // Cargar historial desde DB si existe, sino desde memoria
-    let historial = [];
-    if (MensajeModel) {
-        try {
-            // Últimos 30, ordenados del más viejo al más nuevo
-            const docs = await MensajeModel.find()
-                .sort({ createdAt: -1 })
-                .limit(MAX_MENSAJES)
-                .lean();
-            historial = docs.reverse();
-        } catch (err) {
-            console.error(colors.red, "[DB] Error leyendo historial:", err.message, colors.reset);
-            historial = mensajes;
+    socket.on("auth", async (payload = {}) => {
+        if (autorizado) return;
+
+        const claveRecibida = String(payload.password || "").trim();
+
+        if (claveRecibida !== CLAVE_UNICA) {
+            console.log(
+                `${colors.red}[!] Clave incorrecta para el socket:${colors.reset} ${socket.id}`
+            );
+            socket.emit("auth-denegado");
+            setTimeout(() => socket.disconnect(true), 300);
+            return;
         }
-    } else {
-        historial = mensajes;
-    }
 
-    socket.emit("historial", historial);
+        autorizado = true;
+        socket.join("autorizados");
+        socket.emit("auth-ok");
+
+        const historial = await obtenerHistorial();
+        socket.emit("historial", historial);
+    });
 
     //  Recibir mensajes del cliente (YA CIFRADOS)
     socket.on("mensaje", (data) => {
@@ -158,8 +178,8 @@ io.on("connection", async (socket) => {
         }
 
 
-        // Enviar el mensaje cifrado a TODOS los clientes
-        io.emit("mensaje", mensaje);
+        // Enviar el mensaje cifrado solo a clientes autorizados
+        io.to("autorizados").emit("mensaje", mensaje);
     });
 
     socket.on("disconnect", () => {

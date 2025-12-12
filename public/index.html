@@ -424,7 +424,9 @@
         let miAutorId = null; // ID anónimo que asigna el servidor a este cliente
         let ultimoAutor = null; // para agrupar mensajes consecutivos de la misma persona
         let bufferMensajesPendientes = []; // mensajes recibidos antes de tener la clave
+        let claveValidaIngresada = false; // indica si ya se ingreso la clave permitida
 
+        const CLAVE_UNICA = "Linuxeros";
         const PASS_STORAGE_KEY = "chatE2E_pass_v1";
 
         function guardarPass(password) {
@@ -588,21 +590,37 @@
 
         // ---------- CONFIGURAR CLAVE DE CIFRADO ----------
 
-        btnClave.onclick = async () => {
+        function solicitarAccesoAlServidor() {
+            mensajeLogin.textContent = "Verificando clave...";
+            mensajeLogin.style.color = "#4b5563";
+            socket.emit("auth", { password: CLAVE_UNICA });
+        }
+
+        btnClave.onclick = () => {
             const passwordCifrado = claveCifradoInput.value.trim();
 
-            if (!passwordCifrado) {
-                mensajeLogin.textContent = "Escribe una contraseña de cifrado.";
+            if (passwordCifrado !== CLAVE_UNICA) {
+                mensajeLogin.textContent = 'Clave incorrecta. Usa "Linuxeros".';
                 mensajeLogin.style.color = "salmon";
+                input.disabled = true;
+                btn.disabled = true;
+                claveValidaIngresada = false;
                 return;
             }
 
+            claveValidaIngresada = true;
+            solicitarAccesoAlServidor();
+        };
+
+        claveCifradoInput.addEventListener("keydown", (e) => {
+            if (e.key === "Enter") {
+                btnClave.click();
+            }
+        });
+
+        socket.on("auth-ok", async () => {
             try {
-                mensajeLogin.textContent = "Derivando clave de cifrado...";
-                mensajeLogin.style.color = "#4b5563";
-
-                cryptoKey = await deriveKeyFromPassword(passwordCifrado);
-
+                cryptoKey = await deriveKeyFromPassword(CLAVE_UNICA);
                 mensajeLogin.textContent = "Clave de cifrado lista.";
                 mensajeLogin.style.color = "#16a34a";
                 input.disabled = false;
@@ -611,7 +629,7 @@
 
                 document.getElementById("login").classList.add("oculto");
 
-                guardarPass(passwordCifrado);
+                guardarPass(CLAVE_UNICA);
 
                 procesarBufferSiClaveLista();
             } catch (err) {
@@ -619,12 +637,17 @@
                 mensajeLogin.textContent = "Error derivando clave de cifrado.";
                 mensajeLogin.style.color = "salmon";
             }
-        };
+        });
 
-        claveCifradoInput.addEventListener("keydown", (e) => {
-            if (e.key === "Enter") {
-                btnClave.click();
-            }
+        socket.on("auth-denegado", () => {
+            claveValidaIngresada = false;
+            cryptoKey = null;
+            mensajeLogin.textContent = 'Clave incorrecta. Usa "Linuxeros".';
+            mensajeLogin.style.color = "salmon";
+            estado.textContent = "Clave incorrecta";
+            document.getElementById("login").classList.remove("oculto");
+            input.disabled = true;
+            btn.disabled = true;
         });
 
         // ---------- HISTORIAL Y MENSAJES ----------
@@ -683,8 +706,12 @@
 
         socket.on("connect", () => {
             console.log("Conectado al servidor de sockets");
-            if (!cryptoKey) {
-                estado.textContent = "Conectado (esperando clave de cifrado)";
+            estado.textContent = cryptoKey
+                ? "Conectado (clave configurada)"
+                : "Conectado (esperando clave de cifrado)";
+
+            if (claveValidaIngresada && claveCifradoInput.value.trim() === CLAVE_UNICA) {
+                solicitarAccesoAlServidor();
             }
         });
 
@@ -699,10 +726,13 @@
 
         (function init() {
             const passGuardada = cargarPass();
-            if (passGuardada) {
+            if (passGuardada === CLAVE_UNICA) {
                 claveCifradoInput.value = passGuardada;
                 mensajeLogin.textContent = "Pulsa Enter";
                 mensajeLogin.style.color = "#4b5563";
+                claveValidaIngresada = true;
+            } else if (passGuardada) {
+                localStorage.removeItem(PASS_STORAGE_KEY);
             }
         })();
     </script>
