@@ -101,9 +101,14 @@ function generarMensajeId() {
 function normalizarMensaje(raw) {
     const tipo = raw.tipo || (raw.cipherText ? "texto" : "imagen");
     const messageId =
-        raw.id || raw.messageId || (raw._id ? String(raw._id) : null) || generarMensajeId();
+        raw.messageId ||
+        raw.id ||
+        (raw._id ? String(raw._id) : null) ||
+        generarMensajeId();
     const reacciones =
-        raw.reacciones && typeof raw.reacciones === "object" ? raw.reacciones : {};
+        raw.reacciones && typeof raw.reacciones === "object"
+            ? JSON.parse(JSON.stringify(raw.reacciones))
+            : {};
     return {
         id: messageId,
         messageId,
