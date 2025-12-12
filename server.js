@@ -50,7 +50,7 @@ if (MONGODB_URI) {
 // Guardar los ultimos mensajes (cifrados) en memoria
 // Cada elemento: { autor, cipherText, iv, fecha }
 const mensajes = [];
-const MAX_MENSAJES = 100;
+const MAX_MENSAJES = 120;
 
 async function obtenerHistorial() {
     if (MensajeModel) {
