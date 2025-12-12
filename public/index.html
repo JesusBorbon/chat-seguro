@@ -842,7 +842,7 @@
         let bufferMensajesPendientes = []; // mensajes recibidos antes de tener la clave
         let claveValidaIngresada = false; // indica si ya se ingreso la clave permitida
 
-        const CLAVE_UNICA = "Linuxeros";
+        const CLAVE_UNICA = "Linux";
         const PASS_STORAGE_KEY = "chatE2E_pass_v1";
 
         // Por defecto, ocultar logout hasta estar autenticado
@@ -1019,7 +1019,7 @@
             const passwordCifrado = claveCifradoInput.value.trim();
 
             if (passwordCifrado !== CLAVE_UNICA) {
-                mensajeLogin.textContent = 'Clave incorrecta. Usa "Linuxeros".';
+                mensajeLogin.textContent = 'Clave incorrecta.';
                 mensajeLogin.style.color = "salmon";
                 input.disabled = true;
                 btn.disabled = true;
