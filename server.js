@@ -15,7 +15,7 @@ const http = require("http").createServer(app);
 const io = require("socket.io")(http);
 
 // Clave unica permitida para acceder al chat
-const CLAVE_UNICA = "Linuxeros";
+const CLAVE_UNICA = "Linux";
 
 const MONGODB_URI = process.env.MONGODB_URI || null;
 let MensajeModel = null;

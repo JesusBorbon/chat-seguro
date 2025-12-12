@@ -1067,7 +1067,7 @@
         socket.on("auth-denegado", () => {
             claveValidaIngresada = false;
             cryptoKey = null;
-            mensajeLogin.textContent = 'Clave incorrecta. Usa "Linuxeros".';
+            mensajeLogin.textContent = 'Clave incorrecta.';
             mensajeLogin.style.color = "salmon";
             estado.textContent = "Clave incorrecta";
             document.getElementById("login").classList.remove("oculto");
